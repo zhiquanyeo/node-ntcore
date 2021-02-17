@@ -77,6 +77,10 @@ export default class RRSocket extends EventEmitter {
         }
     }
 
+    public get connected(): boolean {
+        return this._socketConnected;
+    }
+
     public connect() {
         if (this._socketConnected) {
             return;
@@ -105,6 +109,18 @@ export default class RRSocket extends EventEmitter {
             this._socket = undefined;
             this._socketConnected = false;
         }
+    }
+
+    public write(data: Buffer): Promise<void> {
+        if (!this._socketConnected) {
+            return Promise.resolve();
+        }
+
+        return new Promise(resolve => {
+            this._socket.write(data, () => {
+                resolve();
+            });
+        });
     }
 
     private _hookupEvents() {
