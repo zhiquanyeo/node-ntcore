@@ -1,4 +1,4 @@
-import { fromLEB128, parseNetworkEndpointInfo, toLEB128 } from "../protocol/protocol-utils";
+import { fromUnsignedLEB128, leb128EncodedString, parseNetworkEndpointInfo, stringFromLEB128, toUnsignedLEB128 } from "../protocol/protocol-utils";
 
 describe("Protocol Utils", () => {
     it ("should obtain NetworkEndpointInfo-s correctly", () => {
@@ -27,10 +27,19 @@ describe("Protocol Utils", () => {
         const number = 624485;
         const expectedBuffer = Buffer.from([0xE5, 0x8E, 0x26]);
 
-        const encodeResult = toLEB128(624485);
+        const encodeResult = toUnsignedLEB128(624485);
         expect(encodeResult).toEqual(expectedBuffer);
 
-        const decodeResult = fromLEB128(expectedBuffer, 0);
+        const decodeResult = fromUnsignedLEB128(expectedBuffer, 0);
         expect(decodeResult.value).toBe(number);
+    });
+
+    it ("should convert strings to/from LEB128 encoding correctly", () => {
+        const theString = "the quick brown fox";
+
+        const encodedBuffer = leb128EncodedString(theString);
+        const decodedResult = stringFromLEB128(encodedBuffer, 0);
+
+        expect(decodedResult.value).toBe(theString);
     });
 })

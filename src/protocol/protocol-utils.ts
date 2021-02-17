@@ -22,7 +22,7 @@ export function parseNetworkEndpointInfo(address: string, port: number): Network
     };
 }
 
-export function toLEB128(num: number): Buffer {
+export function toUnsignedLEB128(num: number): Buffer {
     let n = num;
     let result: number[] = [];
 
@@ -46,7 +46,7 @@ export interface LEB128Result {
     offset: number;
 }
 
-export function fromLEB128(buf: Buffer, offset: number): LEB128Result {
+export function fromUnsignedLEB128(buf: Buffer, offset: number): LEB128Result {
     let result = 0;
     let shift = 0;
     while (true) {
@@ -67,4 +67,37 @@ export function fromLEB128(buf: Buffer, offset: number): LEB128Result {
         value: result,
         offset
     };
+}
+
+export class BufferLengthError extends Error {}
+export class InvalidMessageTypeError extends Error {}
+
+export function checkBufferLength(buf: Buffer, offset: number, bytesToRead: number = 1) {
+    if (offset + bytesToRead > buf.length) {
+        throw new BufferLengthError(`Cannot read ${bytesToRead} byte(s) starting at ${offset}. Buffer length: ${buf.length}`);
+    }
+}
+
+export function leb128EncodedString(msg: string): Buffer {
+    return Buffer.concat([
+        toUnsignedLEB128(msg.length),
+        Buffer.from(msg, "utf-8")
+    ]);
+}
+
+export interface LEB128StringResult {
+    value: string;
+    offset: number;
+}
+
+export function stringFromLEB128(buf: Buffer, offset: number = 0): LEB128StringResult {
+    let decodeResult = fromUnsignedLEB128(buf, offset);
+    const end = decodeResult.offset + decodeResult.value;
+
+    checkBufferLength(buf, decodeResult.offset, decodeResult.value);
+
+    return {
+        offset: end,
+        value: buf.slice(decodeResult.offset, end).toString("utf-8")
+    }
 }
