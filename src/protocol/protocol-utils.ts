@@ -71,6 +71,8 @@ export function fromUnsignedLEB128(buf: Buffer, offset: number): LEB128Result {
 
 export class BufferLengthError extends Error {}
 export class InvalidMessageTypeError extends Error {}
+export class InvalidEntryValueError extends Error {}
+export class InvalidEntryTypeError extends Error {}
 
 export function checkBufferLength(buf: Buffer, offset: number, bytesToRead: number = 1) {
     if (offset + bytesToRead > buf.length) {
@@ -78,7 +80,7 @@ export function checkBufferLength(buf: Buffer, offset: number, bytesToRead: numb
     }
 }
 
-export function leb128EncodedString(msg: string): Buffer {
+export function encodeLEB128String(msg: string): Buffer {
     return Buffer.concat([
         toUnsignedLEB128(msg.length),
         Buffer.from(msg, "utf-8")
@@ -90,7 +92,7 @@ export interface LEB128StringResult {
     offset: number;
 }
 
-export function stringFromLEB128(buf: Buffer, offset: number = 0): LEB128StringResult {
+export function decodeLEB128String(buf: Buffer, offset: number = 0): LEB128StringResult {
     let decodeResult = fromUnsignedLEB128(buf, offset);
     const end = decodeResult.offset + decodeResult.value;
 
