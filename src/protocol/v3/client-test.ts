@@ -6,4 +6,11 @@ clientV3.on("connectionStateChanged", evt => {
     console.log("Connection State Changed: ", evt);
 })
 
-clientV3.connect();
+
+clientV3.start();
+
+let val = true;
+setInterval(() => {
+    clientV3.setBoolean("/My/SuperCool/Variable", val);
+    val = !val;
+}, 1000);

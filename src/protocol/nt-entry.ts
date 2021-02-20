@@ -22,6 +22,8 @@ export interface NTEntryValue {
     rpc?: Buffer;
 }
 
+export interface NTEntryFlags {}
+
 // Minimal set of fields that make up an NT Entry
 export default interface NTEntry {
     name: string;
@@ -29,4 +31,5 @@ export default interface NTEntry {
     id: number;
     value: NTEntryValue;
     seq: number;
+    flags: NTEntryFlags
 }

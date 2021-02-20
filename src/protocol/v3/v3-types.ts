@@ -1,4 +1,4 @@
-import NTEntry, { NTEntryType } from "../nt-entry";
+import NTEntry, { NTEntryFlags, NTEntryType } from "../nt-entry";
 
 export enum V3EntryType {
     BOOLEAN = 0x00,
@@ -101,11 +101,6 @@ export enum V3ClientHandshakeState {
     V3HS_COMPLETE
 }
 
-export interface V3EntryFlags {
+export interface V3EntryFlags extends NTEntryFlags {
     persistent: boolean;
-}
-
-// Extra fields that the V3 entry needs
-export interface V3NTEntry extends NTEntry {
-    flags: V3EntryFlags;
 }

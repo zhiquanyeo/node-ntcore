@@ -1,49 +1,16 @@
-import { EventEmitter } from "events";
 import RRSocket from "../transport/rr-socket";
+import NTParticipant, { NTParticipantOptions } from "./nt-participant";
+import { NTConnectionState, NTProtocolVersion, NTProtocolVersionUnsupportedError } from "./nt-types";
 
-// A NetworkTablesConnection manages the lifetime of a connection to a
-// NT server. Essentially, it handles connect/reconnects and the
-// appropriate handshake with the server
-
-// Subclasses might have more fine grained states
-export enum NTConnectionState {
-    NTCONN_NOT_CONNECTED,
-    NTCONN_CONNECTING,
-    NTCONN_CONNECTED
-}
-
-export interface NTClientOptions {
+export interface NTClientOptions extends NTParticipantOptions {
     address: string;
     port: number;
 }
 
-
-// TODO this should be moved into a nt-types file at some point
-export class NTProtocolVersionUnsupportedError extends Error {
-    private _serverSupportedVersion: NTProtocolVersion;
-
-    constructor(serverSupportedVersion: NTProtocolVersion, msg?: string) {
-        super(msg);
-
-        this._serverSupportedVersion = serverSupportedVersion;
-    }
-
-    public get serverSupportedVersion(): NTProtocolVersion {
-        return this._serverSupportedVersion;
-    }
-}
-
-export interface NTProtocolVersion {
-    major: number;
-    minor: number;
-}
-
-
-export default abstract class NTClient extends EventEmitter {
+export default abstract class NTClient extends NTParticipant {
     protected _socket: RRSocket;
     private _currState: NTConnectionState = NTConnectionState.NTCONN_NOT_CONNECTED;
-    private _version: NTProtocolVersion = { major: -1, minor: -1};
-
+    
     protected constructor(version: NTProtocolVersion, options: NTClientOptions = { address: "localhost", port: 1735}) {
         super();
 
@@ -58,7 +25,6 @@ export default abstract class NTClient extends EventEmitter {
         this._socket.on("connected", async () => {
             // The "connected" event represents that the transport layer
             // (i.e. TCP) is now connected. We can initiate handshaking
-            // Hand off to the handshake
             try {
                 this._setConnectionState(NTConnectionState.NTCONN_CONNECTING);
                 await this._handshake();
@@ -104,17 +70,14 @@ export default abstract class NTClient extends EventEmitter {
         return this._socket.port;
     }
 
-    public connect() {
+    public start() {
         this._socket.connect();
     }
 
-    public disconnect() {
+    public stop() {
         this._setConnectionState(NTConnectionState.NTCONN_NOT_CONNECTED);
         this._socket.disconnect();
     }
-
-    // PUBLIC API FOR CLIENTS
-
 
     protected _write(data: Buffer, immediate: boolean = false): Promise<void> {
         // TODO Buffer
@@ -123,10 +86,10 @@ export default abstract class NTClient extends EventEmitter {
 
     private _setConnectionState(state: NTConnectionState) {
         if (this._currState !== state) {
-            this.emit("connectionStateChanged", {
-                oldState: this._currState,
-                newState: state
-            });
+            this.emit("connectionStateChanged", 
+                this._currState,
+                state
+            );
             this._currState = state;
         }
 

@@ -24,11 +24,11 @@ describe("RRSocket", () => {
             events.push("server-connect");
         });
 
-        server.listen(1735);
+        server.listen(2021);
 
         const client: RRSocket = new RRSocket({
             address: "localhost",
-            port: 1735,
+            port: 2021,
             ident: "test-1"
         });
 
@@ -61,7 +61,7 @@ describe("RRSocket", () => {
 
         const client: RRSocket = new RRSocket({
             address: "localhost",
-            port: 1735,
+            port: 2022,
             reconnectDelay: 1000,
             ident: "test-2"
         });
@@ -92,7 +92,7 @@ describe("RRSocket", () => {
 
         const client: RRSocket = new RRSocket({
             address: "localhost",
-            port: 1735,
+            port: 2023,
             ident: "test-3"
         });
 
@@ -113,7 +113,7 @@ describe("RRSocket", () => {
             }
         });
 
-        server.listen(1735);
+        server.listen(2023);
 
         client.on("connected", () => {
             events.push("connected");
@@ -161,12 +161,12 @@ describe("RRSocket", () => {
             socket.write("def");
         })
 
-        server1.listen(1735);
-        server2.listen(1736);
+        server1.listen(2024);
+        server2.listen(2025);
 
         const client: RRSocket = new RRSocket({
             address: "localhost",
-            port: 1735,
+            port: 2024,
             ident: "test-4"
         });
 
@@ -180,12 +180,12 @@ describe("RRSocket", () => {
             if (numConnections === 1) {
                 // Switch ports to the other server
                 setTimeout(() => {
-                    client.port = 1736;
+                    client.port = 2025;
                 }, 500);
             }
             else if (numConnections === 2) {
                 setTimeout(() => {
-                    client.port = 1735;
+                    client.port = 2024;
                 }, 500);
             }
             else if (numConnections === 3) {
@@ -209,7 +209,7 @@ describe("RRSocket", () => {
     it("should connect when a server eventually starts up", async (done) => {
         const client: RRSocket = new RRSocket({
             address: "localhost",
-            port: 1735,
+            port: 2026,
             reconnectDelay: 500,
             ident: "test-5"
         });
@@ -233,7 +233,7 @@ describe("RRSocket", () => {
         client.connect();
 
         setTimeout(() => {
-            server.listen(1735);
+            server.listen(2026);
         }, 3000);
     });
 });

@@ -1,5 +1,5 @@
 import ieee754 from "ieee754";
-import { NTEntryValue } from "../nt-entry";
+import { NTEntryFlags, NTEntryValue } from "../nt-entry";
 import { checkBufferLength, InvalidEntryValueError, InvalidMessageTypeError, encodeLEB128String, decodeLEB128String, toUnsignedLEB128, InvalidEntryTypeError, fromUnsignedLEB128 } from "../protocol-utils";
 import { ByteToV3EntryType, ByteToV3MessageType, CLEAR_ALL_ENTRIES_MAGIC_VALUE, V3EntryFlags, V3EntryType, V3MessageType } from "./v3-types";
 
@@ -45,7 +45,7 @@ export interface V3EntryAssignmentMessage extends V3Message {
     entryType: V3EntryType;
     entryId: number;
     entrySeq: number;
-    entryFlags: V3EntryFlags;
+    entryFlags: NTEntryFlags;
     entryValue: NTEntryValue;
 }
 
@@ -60,7 +60,7 @@ export interface V3EntryUpdateMessage extends V3Message {
 export interface V3EntryFlagsUpdateMessage extends V3Message {
     type: V3MessageType.ENTRY_FLAGS_UPDATE;
     entryId: number;
-    entryFlags: V3EntryFlags;
+    entryFlags: NTEntryFlags;
 }
 
 export interface V3EntryDeleteMessage extends V3Message {
@@ -501,7 +501,7 @@ export function entryAssignmentMessageToBuffer(msg: V3EntryAssignmentMessage): B
         Buffer.from([msg.entryType]),
         idBuf,
         seqBuf,
-        Buffer.from([entryFlagsToUInt8(msg.entryFlags)]),
+        Buffer.from([entryFlagsToUInt8(msg.entryFlags as V3EntryFlags)]),
         entryValueToBuffer(msg.entryType, msg.entryValue)
     ]);
 }
@@ -619,7 +619,7 @@ export function entryFlagsUpdateMessageToBuffer(msg: V3EntryFlagsUpdateMessage):
     return Buffer.concat([
         Buffer.from([V3MessageType.ENTRY_FLAGS_UPDATE]),
         idBuf,
-        Buffer.from([entryFlagsToUInt8(msg.entryFlags)])
+        Buffer.from([entryFlagsToUInt8(msg.entryFlags as V3EntryFlags)])
     ]);
 }
 
