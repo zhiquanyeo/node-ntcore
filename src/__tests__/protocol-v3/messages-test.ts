@@ -1,4 +1,4 @@
-import { V3EntryType, V3MessageType } from "../../protocol/v3/v3-types";
+import { V3EntryType, V3MessageType, V3RPCDefinition } from "../../protocol/v3/v3-types";
 import { clearAllEntriesMessageFromBuffer, clearAllEntriesMessageToBuffer, clientHelloCompleteMessageFromBuffer, clientHelloCompleteMessageToBuffer, clientHelloMessageFromBuffer, clientHelloMessageToBuffer, entryAssignmentMessageFromBuffer, entryAssignmentMessageToBuffer, entryDeleteMessageFromBuffer, entryDeleteMessageToBuffer, entryFlagsUpdateMessageFromBuffer, entryFlagsUpdateMessageToBuffer, entryUpdateMessageFromBuffer, entryUpdateMessageToBuffer, keepAliveMessageFromBuffer, keepAliveMessageToBuffer, protoVersionUnsupportedMessageFromBuffer, protoVersionUnsupportedMessageToBuffer, serverHelloCompleteMessageFromBuffer, serverHelloCompleteMessageToBuffer, serverHelloMessageFromBuffer, serverHelloMessageToBuffer, V3ClientHelloMessage, V3EntryAssignmentMessage, V3EntryDeleteMessage, V3EntryDeleteMessageWrapper, V3EntryFlagsUpdateMessage, V3EntryUpdateMessage, V3ProtoVersionUnsupportedMessage, V3ServerHelloMessage } from "../../protocol/v3/v3-messages";
 
 describe("NT V3 Messages", () => {
@@ -223,6 +223,33 @@ describe("NT V3 Messages", () => {
 
         // TODO need to tweak the RPC stuff
         it("should encode/decode RPC EntryAssignment messages correctly", () => {
+            const rpcDef: V3RPCDefinition = {
+                name: "My RPC",
+                parameters: [
+                    {
+                        name: "Param1",
+                        type: V3EntryType.BOOLEAN,
+                        value: {
+                            bool: false
+                        }
+                    },
+                    {
+                        name: "Param2",
+                        type: V3EntryType.STRING,
+                        value: {
+                            str: "FooBar"
+                        }
+                    }
+                ],
+                results: [
+                    {
+                        name: "Result1",
+                        type: V3EntryType.DOUBLE,
+                        value: {}
+                    }
+                ]
+            };
+
             const expected: V3EntryAssignmentMessage = {
                 type: V3MessageType.ENTRY_ASSIGNMENT,
                 entryName: "/My/Super/Cool/Entry",
@@ -233,7 +260,7 @@ describe("NT V3 Messages", () => {
                     persistent: true
                 },
                 entryValue: {
-                    rpc: Buffer.from([1, 2, 3, 4, 0xDE, 0xAD, 0xBE, 0xEF])
+                    rpc: rpcDef
                 }
             };
 

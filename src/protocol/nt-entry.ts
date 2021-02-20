@@ -19,7 +19,7 @@ export interface NTEntryValue {
     bool_array?: boolean[];
     double_array?: number[];
     str_array?: string[];
-    rpc?: Buffer;
+    rpc?: any; // TODO proper spec?
 }
 
 export interface NTEntryFlags {}

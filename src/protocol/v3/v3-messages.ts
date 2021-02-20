@@ -1,7 +1,7 @@
 import ieee754 from "ieee754";
 import { NTEntryFlags, NTEntryValue } from "../nt-entry";
 import { checkBufferLength, InvalidEntryValueError, InvalidMessageTypeError, encodeLEB128String, decodeLEB128String, toUnsignedLEB128, InvalidEntryTypeError, fromUnsignedLEB128 } from "../protocol-utils";
-import { ByteToV3EntryType, ByteToV3MessageType, CLEAR_ALL_ENTRIES_MAGIC_VALUE, V3EntryFlags, V3EntryType, V3MessageType } from "./v3-types";
+import { ByteToV3EntryType, ByteToV3MessageType, CLEAR_ALL_ENTRIES_MAGIC_VALUE, V3EntryFlags, V3EntryType, V3MessageType, V3RPCDefinition as V3RPCDefinition, V3RPCParameter, V3RPCResult } from "./v3-types";
 
 // MESSAGES
 export interface V3Message {
@@ -76,16 +76,14 @@ export interface V3RPCExecuteMessage extends V3Message {
     type: V3MessageType.RPC_EXECUTE;
     rpcDefinitionId: number;
     uniqueId: number;
-    parameterValueLength: number;
-    parameterValues: any;
+    parameters: V3RPCParameter[];
 }
 
 export interface V3RPCResponseMessage extends V3Message {
     type: V3MessageType.RPC_RESPONSE;
     rpcDefinitionId: number;
     uniqueId: number;
-    resultValueLength: number;
-    resultValues: any;
+    results: V3RPCResult[];
 }
 
 // BUFFER MANIPULATION
@@ -349,9 +347,10 @@ export function entryValueToBuffer(type: V3EntryType, valueObj: NTEntryValue): B
             ]);
         }
         case V3EntryType.RPC: {
+            const encodedRpcBuf = encodeRPCDefinition(valueObj.rpc as V3RPCDefinition);
             return Buffer.concat([
-                toUnsignedLEB128(valueObj.rpc.length),
-                valueObj.rpc
+                Buffer.from([encodedRpcBuf.length]),
+                encodedRpcBuf
             ]);
         }
     }
@@ -471,15 +470,16 @@ export function entryValueFromBuffer(type: V3EntryType, buf: Buffer, offset: num
 
             checkBufferLength(buf, bufLenResult.offset, bufLen);
 
-            const rpcBuf = Buffer.allocUnsafe(bufLen);
-            buf.copy(rpcBuf, 0, bufLenResult.offset, bufLenResult.offset + bufLen);
-
+            // The buffer starting at bufLenResult.offset now holds the RPC
+            // definition entry
+            const rpcDefinitionResult = decodeRPCDefinition(buf, bufLenResult.offset);
+            
             return {
                 value: {
-                    rpc: rpcBuf
+                    rpc: rpcDefinitionResult.value
                 },
-                newOffset: bufLenResult.offset + bufLen
-            }
+                newOffset: rpcDefinitionResult.newOffset
+            };
         }
     }
 }
@@ -695,7 +695,159 @@ export function clearAllEntriesMessageFromBuffer(buf: Buffer, offset: number = 0
     }
 }
 
-// TODO RPC
+// RPC EXECUTE
+export interface V3RPCExecuteMessageWrapper {
+    message: V3RPCExecuteMessage;
+    newOffset: number;
+}
+
+export function rpcExecuteMessageToBuffer(msg: V3RPCExecuteMessage): Buffer {
+    const headerBuf = Buffer.alloc(3);
+    headerBuf[0] = V3MessageType.RPC_EXECUTE;
+    headerBuf.writeUInt16BE(msg.rpcDefinitionId, 1);
+    
+    const idBuf = Buffer.alloc(2);
+    idBuf.writeUInt16BE(msg.uniqueId);
+
+    const numParamsBuf = toUnsignedLEB128(msg.parameters.length);
+
+    const paramBufs: Buffer[] = msg.parameters.map(param => {
+        return entryValueToBuffer(param.type, param.value);
+    });
+
+    return Buffer.concat([
+        headerBuf,
+        idBuf,
+        numParamsBuf,
+        Buffer.concat(paramBufs)
+    ]);
+}
+
+export function rpcExecuteMessageFromBuffer(rpcDefinitions: Map<number, V3RPCDefinition>, buf: Buffer, offset: number = 0): V3RPCExecuteMessageWrapper {
+    checkBufferLength(buf, offset, 6);
+    checkMessageType(buf, offset, V3MessageType.RPC_EXECUTE);
+
+    let bufOffset = offset + 1; // Points to Definition Entry ID
+    const rpcDefinitionId = buf.readUInt16BE(bufOffset);
+
+    if (!rpcDefinitions.has(rpcDefinitionId)) {
+        throw new Error("No RPC definition found");
+    }
+
+    const rpcDefinition = rpcDefinitions.get(rpcDefinitionId);
+
+    bufOffset += 2; // Points to unique ID
+    const uniqueId = buf.readUInt16BE(bufOffset);
+
+    bufOffset += 2; // Points to param value length
+    const numParamResults = fromUnsignedLEB128(buf, bufOffset);
+    const numParams = numParamResults.value;
+
+    if (numParams !== rpcDefinition.parameters.length) {
+        throw new Error("Mismatch in RPC parameter counts");
+    }
+
+    const parameters: V3RPCParameter[] = [];
+
+    bufOffset = numParamResults.offset; // Now points to the first param value
+    for (let i = 0; i < numParams; i++) {
+        const paramDef = rpcDefinition.parameters[i];
+        const valueResult = entryValueFromBuffer(paramDef.type, buf, bufOffset);
+        parameters.push({
+            type: paramDef.type,
+            name: paramDef.name.slice(),
+            value: valueResult.value
+        });
+        bufOffset = valueResult.newOffset;
+    }
+
+    return {
+        message: {
+            type: V3MessageType.RPC_EXECUTE,
+            rpcDefinitionId,
+            uniqueId,
+            parameters
+        },
+        newOffset: bufOffset
+    }
+}
+
+// RPC RESPONSE
+export interface V3RPCResponseMessageWrapper {
+    message: V3RPCResponseMessage;
+    newOffset: number;
+}
+
+export function rpcResponseMessageToBuffer(msg: V3RPCResponseMessage): Buffer {
+    const headerBuf: Buffer = Buffer.alloc(3);
+    headerBuf[0] = V3MessageType.RPC_RESPONSE;
+    headerBuf.writeUInt16BE(msg.rpcDefinitionId, 1);
+
+    const idBuf = Buffer.alloc(2);
+    idBuf.writeUInt16BE(msg.uniqueId);
+
+    const numResultsBuf = toUnsignedLEB128(msg.results.length);
+
+    const resultBufs: Buffer[] = msg.results.map(result => {
+        return entryValueToBuffer(result.type, result.value);
+    });
+
+    return Buffer.concat([
+        headerBuf,
+        idBuf,
+        numResultsBuf,
+        Buffer.concat(resultBufs)
+    ]);
+}
+
+export function rpcResponseMessageFromBuffer(rpcDefinitions: Map<number, V3RPCDefinition>, buf: Buffer, offset: number = 0): V3RPCResponseMessageWrapper {
+    checkBufferLength(buf, offset, 6);
+    checkMessageType(buf, offset, V3MessageType.RPC_RESPONSE);
+
+    let bufOffset = offset + 1; // Points to Definiteion Entry ID
+    const rpcDefinitionId = buf.readUInt16BE(bufOffset);
+
+    if (!rpcDefinitions.has(rpcDefinitionId)) {
+        throw new Error("No RPC definition found");
+    }
+
+    const rpcDef = rpcDefinitions.get(rpcDefinitionId);
+
+    bufOffset += 2; // Points to unique ID
+    const uniqueId = buf.readUInt16BE(bufOffset);
+
+    bufOffset += 2; // Points to result length value
+    const numResultsResult = fromUnsignedLEB128(buf, bufOffset);
+    const numResults = numResultsResult.value
+
+    if (numResults !== rpcDef.results.length) {
+        throw new Error("Mismatch in RPC result counts");
+    }
+
+    const results: V3RPCResult[] = [];
+
+    bufOffset = numResultsResult.offset;
+    for (let i = 0; i < numResults; i++) {
+        const resultDef = rpcDef.results[i];
+        const valueResult = entryValueFromBuffer(resultDef.type, buf, bufOffset);
+        results.push({
+            type: resultDef.type,
+            name: resultDef.name.slice(),
+            value: valueResult.value
+        });
+        bufOffset = valueResult.newOffset;
+    }
+
+    return {
+        message: {
+            type: V3MessageType.RPC_RESPONSE,
+            rpcDefinitionId,
+            uniqueId,
+            results
+        },
+        newOffset: bufOffset
+    }
+}
 
 // Utility functions
 export function getMessageType(buf: Buffer, offset: number = 0): V3MessageType {
@@ -711,7 +863,7 @@ export interface V3MessageWrapper {
     newOffset: number;
 }
 
-export function getNextAvailableMessage(buf: Buffer, offset: number = 0): V3MessageWrapper | undefined {
+export function getNextAvailableMessage(rpcDefinitions: Map<number, V3RPCDefinition>, buf: Buffer, offset: number = 0): V3MessageWrapper | undefined {
     let msgType: V3MessageType;
 
     try {
@@ -797,11 +949,158 @@ export function getNextAvailableMessage(buf: Buffer, offset: number = 0): V3Mess
                     ...result
                 }
             }
-            // TODO RPC
+            case V3MessageType.RPC_EXECUTE: {
+                const result = rpcExecuteMessageFromBuffer(rpcDefinitions, buf, offset);
+                return {
+                    ...result
+                }
+            }
+            case V3MessageType.RPC_RESPONSE: {
+                const result = rpcResponseMessageFromBuffer(rpcDefinitions, buf, offset);
+                return {
+                    ...result
+                }
+            }
         }
     }
     catch(e) {
         console.log("Error while parsing message: ", e);
         return undefined;
     }
+}
+
+export interface RPCDefinitionDecodeResult {
+    value: V3RPCDefinition;
+    newOffset: number;
+}
+
+export function decodeRPCDefinition(buf: Buffer, offset: number = 0): RPCDefinitionDecodeResult {
+    let bufOffset = offset;
+
+    if (buf[bufOffset] !== 1) {
+        throw new Error("Unsupported RPC Version");
+    }
+
+    bufOffset += 1; // This now points to the Name string
+    const procedureNameResult = decodeLEB128String(buf, bufOffset);
+    const procedureName = procedureNameResult.value;
+
+    bufOffset = procedureNameResult.offset; // This now points to the number of params
+    const numParams = buf[bufOffset];
+
+    bufOffset += 1; // This now points to the first parameter spec definition
+
+    const params: V3RPCParameter[] = [];
+
+    for (let i = 0; i < numParams; i++) {
+        const decodedParam = decodeRPCParameterSpec(buf, bufOffset);
+        params.push(decodedParam.value);
+
+        bufOffset = decodedParam.newOffset;
+    }
+
+    const numResults = buf[bufOffset];
+    bufOffset += 1;
+
+    const results: V3RPCResult[] = [];
+
+    for (let i = 0; i < numResults; i++) {
+        const decodedResult = decodeRPCResultSpec(buf, bufOffset);
+        results.push(decodedResult.value);
+
+        bufOffset = decodedResult.newOffset;
+    }
+
+    // bufOffset will now point to the next byte after the RPC def
+
+    return {
+        value: {
+            name: procedureName,
+            parameters: params,
+            results
+        },
+        newOffset: bufOffset
+    }
+}
+
+export function encodeRPCDefinition(rpcDef: V3RPCDefinition): Buffer {
+    const paramBuffers: Buffer[] = rpcDef.parameters.map(param => {
+        return encodeRPCParameterSpec(param);
+    });
+
+    const resultBuffers: Buffer[] = rpcDef.results.map(result => {
+        return encodeRPCResultSpec(result);
+    });
+
+    return Buffer.concat([
+        Buffer.from([1]),
+        encodeLEB128String(rpcDef.name),
+        Buffer.from([paramBuffers.length]),
+        Buffer.concat(paramBuffers),
+        Buffer.from([resultBuffers.length]),
+        Buffer.concat(resultBuffers)
+    ]);
+}
+
+interface RPCParamDecodeResult {
+    value: V3RPCParameter;
+    newOffset: number;
+}
+
+function decodeRPCParameterSpec(buf: Buffer, offset: number = 0): RPCParamDecodeResult {
+    let bufOffset = offset;
+    const type = (buf[bufOffset] as V3EntryType);
+
+    bufOffset += 1; // This now points at the param name
+    const paramNameResult = decodeLEB128String(buf, bufOffset);
+    const paramName = paramNameResult.value;
+
+    bufOffset = paramNameResult.offset; // This now points at the default value
+    const defaultValueResult = entryValueFromBuffer(type, buf, bufOffset);
+
+    return {
+        value: {
+            type,
+            name: paramName,
+            value: defaultValueResult.value
+        },
+        newOffset: defaultValueResult.newOffset
+    }
+}
+
+function encodeRPCParameterSpec(param: V3RPCParameter): Buffer {
+    return Buffer.concat([
+        Buffer.from([param.type]),
+        encodeLEB128String(param.name),
+        entryValueToBuffer(param.type, param.value)
+    ]);
+}
+
+interface RPCResultDecodeResult {
+    value: V3RPCResult;
+    newOffset: number;
+}
+
+function decodeRPCResultSpec(buf: Buffer, offset: number = 0): RPCResultDecodeResult {
+    let bufOffset = offset;
+    const type = (buf[bufOffset] as V3EntryType);
+
+    bufOffset += 1; // This now points at the result name
+    const resultNameResult = decodeLEB128String(buf, bufOffset);
+
+    return {
+        value: {
+            type,
+            name: resultNameResult.value,
+            value: {}
+        },
+        newOffset: resultNameResult.offset
+    }
+}
+
+function encodeRPCResultSpec(result: V3RPCResult): Buffer {
+    return Buffer.concat([
+        Buffer.from([result.type]),
+        encodeLEB128String(result.name)
+    ]);
 }

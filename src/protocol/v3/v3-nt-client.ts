@@ -1,8 +1,8 @@
 import StrictEventEmitter from "strict-event-emitter-types";
 import NTClient, { NTClientOptions } from "../nt-client";
 import { EventEmitter } from "events";
-import { NTtoV3EntryType, V3ClientHandshakeState, V3EntryFlags, V3MessageType, V3MessageTypeToString, V3toNTEntryType } from "./v3-types";
-import { clientHelloCompleteMessageToBuffer, clientHelloMessageToBuffer, entryAssignmentMessageToBuffer, entryUpdateMessageToBuffer, getNextAvailableMessage, V3ClearAllEntriesMessage, V3EntryAssignmentMessage, V3EntryDeleteMessage, V3EntryFlagsUpdateMessage, V3EntryUpdateMessage, V3Message, V3MessageWrapper, V3ProtoVersionUnsupportedMessage } from "./v3-messages";
+import { NTtoV3EntryType, V3ClientHandshakeState, V3EntryFlags, V3EntryType, V3MessageType, V3MessageTypeToString, V3RPCDefinition, V3toNTEntryType } from "./v3-types";
+import { clientHelloCompleteMessageToBuffer, clientHelloMessageToBuffer, entryAssignmentMessageToBuffer, entryUpdateMessageToBuffer, getNextAvailableMessage, V3ClearAllEntriesMessage, V3EntryAssignmentMessage, V3EntryDeleteMessage, V3EntryFlagsUpdateMessage, V3EntryUpdateMessage, V3Message, V3MessageWrapper, V3ProtoVersionUnsupportedMessage, V3RPCResponseMessage } from "./v3-messages";
 import NTEntry, { NTEntryType } from "../nt-entry";
 import { NTEntryNotFoundError, NTEntryTypeMismatchError, NTEventUpdateSource, NTProtocolVersion, NTProtocolVersionUnsupportedError } from "../nt-types";
 
@@ -172,6 +172,9 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
 export default class V3NTClient extends NTClient {
     private _entryNameToId: Map<string, number> = new Map<string, number>();
     private _entries: Map<number, NTEntry> = new Map<number, NTEntry>();
+    
+    // RPC Definitions
+    private _rpcDefinitions: Map<number, V3RPCDefinition> = new Map<number, V3RPCDefinition>();
 
     // Pending entries are those in which the client side has seen, but the
     // server hasn't actually assigned yet
@@ -356,12 +359,17 @@ export default class V3NTClient extends NTClient {
                     this._entries.clear();
 
                     this._pendingEntries.clear();
+                    this._rpcDefinitions.clear();
 
                     data.clientSideEntries.forEach((entry, name) => {
                         if (entry.id !== 0xFFFF) {
                             // Real, server-assigned record
                             this._entries.set(entry.id, {...entry});
                             this._entryNameToId.set(entry.name, entry.id);
+
+                            if (entry.type === NTEntryType.RPC) {
+                                this._rpcDefinitions.set(entry.id, (entry.value.rpc as V3RPCDefinition));
+                            }
                         }
                         else {
                             // Pending entry
@@ -392,7 +400,7 @@ export default class V3NTClient extends NTClient {
         }
 
         let nextMessageResult: V3MessageWrapper;
-        while (nextMessageResult = getNextAvailableMessage(this._dataBuffer)) {
+        while (nextMessageResult = getNextAvailableMessage(this._rpcDefinitions, this._dataBuffer)) {
             console.log("GOT A MESSAGE: ", V3MessageTypeToString.get(nextMessageResult.message.type));
             this._pendingMessages.push(nextMessageResult.message);
             this._dataBuffer = Buffer.from(this._dataBuffer.slice(nextMessageResult.newOffset));
@@ -432,7 +440,10 @@ export default class V3NTClient extends NTClient {
                     case V3MessageType.CLEAR_ALL_ENTRIES: {
                         this._handleClearAllEntries((lastMessage as V3ClearAllEntriesMessage));
                     } break;
-                    // TODO RPC
+                    case V3MessageType.RPC_RESPONSE: {
+                        this._handleRPCRespnse((lastMessage as V3RPCResponseMessage));
+                    } break;
+                    // NOTE: We don't handle RPC_EXECUTE messages as a client
                     default: {
                         console.log(`Dropping ${V3MessageTypeToString.get(lastMessage.type)} message (not handled)`);
                     }
@@ -467,6 +478,12 @@ export default class V3NTClient extends NTClient {
         this._entryNameToId.set(msg.entryName, msg.entryId);
 
         console.log(`Added new entry ${msg.entryName}: `, this._entries.get(msg.entryId));
+
+        if (msg.entryType === V3EntryType.RPC) {
+            this._rpcDefinitions.set(msg.entryId, (msg.entryValue as V3RPCDefinition));
+            console.log(`Added new RPC Definiteion ${msg.entryName}: `, msg.entryValue);
+        }
+
         this.emit("entryAdded", {
             source: NTEventUpdateSource.REMOTE,
             entry: {...this._entries.get(msg.entryId)}
@@ -517,6 +534,10 @@ export default class V3NTClient extends NTClient {
 
     private _handleClearAllEntries(msg: V3ClearAllEntriesMessage) {
         // Unclear if we will ever get this
+    }
+
+    private _handleRPCRespnse(msg: V3RPCResponseMessage) {
+        // TODO Implement
     }
 
     private _setEntryData(newEntry: NTEntry): boolean {

@@ -1,4 +1,4 @@
-import NTEntry, { NTEntryFlags, NTEntryType } from "../nt-entry";
+import NTEntry, { NTEntryFlags, NTEntryType, NTEntryValue } from "../nt-entry";
 
 export enum V3EntryType {
     BOOLEAN = 0x00,
@@ -103,4 +103,22 @@ export enum V3ClientHandshakeState {
 
 export interface V3EntryFlags extends NTEntryFlags {
     persistent: boolean;
+}
+
+export interface V3RPCDefinition {
+    name: string;
+    parameters: V3RPCParameter[];
+    results: V3RPCResult[];
+}
+
+export interface V3RPCParameter {
+    type: V3EntryType;
+    name: string;
+    value: NTEntryValue
+}
+
+export interface V3RPCResult {
+    type: V3EntryType;
+    name: string;
+    value: NTEntryValue
 }
