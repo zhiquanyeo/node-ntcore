@@ -78,13 +78,26 @@ export const ByteToV3MessageType = {
     0x21: V3MessageType.RPC_RESPONSE
 }
 
+export const V3MessageTypeToString: Map<V3MessageType, string> = new Map<V3MessageType, string>();
+V3MessageTypeToString.set(V3MessageType.KEEP_ALIVE, "KEEP_ALIVE");
+V3MessageTypeToString.set(V3MessageType.CLIENT_HELLO, "CLIENT_HELLO");
+V3MessageTypeToString.set(V3MessageType.PROTO_VERSION_UNSUPPORTED, "PROTO_VERSION_UNSUPPORTED");
+V3MessageTypeToString.set(V3MessageType.SERVER_HELLO_COMPLETE, "SERVER_HELLO_COMPLETE");
+V3MessageTypeToString.set(V3MessageType.SERVER_HELLO, "SERVER_HELLO");
+V3MessageTypeToString.set(V3MessageType.CLIENT_HELLO_COMPLETE, "CLIENT_HELLO_COMPLETE");
+V3MessageTypeToString.set(V3MessageType.ENTRY_ASSIGNMENT, "ENTRY_ASSIGNMENT");
+V3MessageTypeToString.set(V3MessageType.ENTRY_UPDATE, "ENTRY_UPDATE");
+V3MessageTypeToString.set(V3MessageType.ENTRY_FLAGS_UPDATE, "ENTRY_FLAGS_UPDATE");
+V3MessageTypeToString.set(V3MessageType.ENTRY_DELETE, "ENTRY_DELETE");
+V3MessageTypeToString.set(V3MessageType.CLEAR_ALL_ENTRIES, "CLEAR_ALL_ENTRIES");
+V3MessageTypeToString.set(V3MessageType.RPC_EXECUTE, "RPC_EXECUTE");
+V3MessageTypeToString.set(V3MessageType.RPC_RESPONSE, "RPC_RESPONSE");
+
 // States for the Client-side handshake state machine
 export enum V3ClientHandshakeState {
     V3HS_NOT_CONNECTED,
     V3HS_AWAIT_SERVER_HELLO,
     V3HS_AWAIT_SERVER_ENTRIES,
-    V3HS_SERVER_HELLO_COMPLETE,
-    V3HS_AWAIT_ENTRY_SYNC,
     V3HS_COMPLETE
 }
 
@@ -95,5 +108,4 @@ export interface V3EntryFlags {
 // Extra fields that the V3 entry needs
 export interface V3NTEntry extends NTEntry {
     flags: V3EntryFlags;
-    persistent: boolean;
 }

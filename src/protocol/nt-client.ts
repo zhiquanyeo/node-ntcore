@@ -17,12 +17,34 @@ export interface NTClientOptions {
     port: number;
 }
 
+
+// TODO this should be moved into a nt-types file at some point
+export class NTProtocolVersionUnsupportedError extends Error {
+    private _serverSupportedVersion: NTProtocolVersion;
+
+    constructor(serverSupportedVersion: NTProtocolVersion, msg?: string) {
+        super(msg);
+
+        this._serverSupportedVersion = serverSupportedVersion;
+    }
+
+    public get serverSupportedVersion(): NTProtocolVersion {
+        return this._serverSupportedVersion;
+    }
+}
+
+export interface NTProtocolVersion {
+    major: number;
+    minor: number;
+}
+
+
 export default abstract class NTClient extends EventEmitter {
     protected _socket: RRSocket;
     private _currState: NTConnectionState = NTConnectionState.NTCONN_NOT_CONNECTED;
-    private _version: number = -1;
+    private _version: NTProtocolVersion = { major: -1, minor: -1};
 
-    protected constructor(version: number, options: NTClientOptions = { address: "localhost", port: 1735}) {
+    protected constructor(version: NTProtocolVersion, options: NTClientOptions = { address: "localhost", port: 1735}) {
         super();
 
         this._version = version;
@@ -43,19 +65,18 @@ export default abstract class NTClient extends EventEmitter {
                 this._setConnectionState(NTConnectionState.NTCONN_CONNECTED);
             }
             catch(err) {
-                console.log(err);
                 this._setConnectionState(NTConnectionState.NTCONN_NOT_CONNECTED);
+                if (err instanceof NTProtocolVersionUnsupportedError) {
+                    console.log(`Unsupported version requested. Server supports ${err.serverSupportedVersion.major}.${err.serverSupportedVersion.minor}`);
+                }
+
+                // Re-throw the error
+                throw err;
             }
         });
 
         this._socket.on("data", (data: Buffer) => {
-            if (this._currState === NTConnectionState.NTCONN_CONNECTED) {
-                // Hand off to the data handler
-                this._handleData(data);
-            }
-            else {
-                this._handleNonConnectedData(data);
-            }
+            this._handleData(data);
         });
 
         this._socket.on("close", () => {
@@ -94,7 +115,8 @@ export default abstract class NTClient extends EventEmitter {
 
     // PUBLIC API FOR CLIENTS
 
-    protected write(data: Buffer, immediate: boolean = false): Promise<void> {
+
+    protected _write(data: Buffer, immediate: boolean = false): Promise<void> {
         // TODO Buffer
         return this._socket.write(data);
     }
@@ -112,5 +134,4 @@ export default abstract class NTClient extends EventEmitter {
 
     protected abstract _handshake(): Promise<void>;
     protected abstract _handleData(data: Buffer): void;
-    protected _handleNonConnectedData(data: Buffer): void {}
 }

@@ -1,7 +1,7 @@
 import ieee754 from "ieee754";
 import { NTEntryValue } from "../nt-entry";
 import { checkBufferLength, InvalidEntryValueError, InvalidMessageTypeError, encodeLEB128String, decodeLEB128String, toUnsignedLEB128, InvalidEntryTypeError, fromUnsignedLEB128 } from "../protocol-utils";
-import { ByteToV3EntryType, CLEAR_ALL_ENTRIES_MAGIC_VALUE, V3EntryFlags, V3EntryType, V3MessageType } from "./v3-types";
+import { ByteToV3EntryType, ByteToV3MessageType, CLEAR_ALL_ENTRIES_MAGIC_VALUE, V3EntryFlags, V3EntryType, V3MessageType } from "./v3-types";
 
 // MESSAGES
 export interface V3Message {
@@ -692,5 +692,116 @@ export function clearAllEntriesMessageFromBuffer(buf: Buffer, offset: number = 0
             type: V3MessageType.CLEAR_ALL_ENTRIES
         },
         newOffset: offset + 5
+    }
+}
+
+// TODO RPC
+
+// Utility functions
+export function getMessageType(buf: Buffer, offset: number = 0): V3MessageType {
+    if (!(buf[offset] in ByteToV3MessageType)) {
+        throw new InvalidMessageTypeError(`Invalid message type found at offset ${offset}`);
+    }
+
+    return (buf[offset] as V3MessageType);
+}
+
+export interface V3MessageWrapper {
+    message: V3Message;
+    newOffset: number;
+}
+
+export function getNextAvailableMessage(buf: Buffer, offset: number = 0): V3MessageWrapper | undefined {
+    let msgType: V3MessageType;
+
+    try {
+        msgType = getMessageType(buf, offset);
+    }
+    catch (e) {
+        // console.log("ERR while getting message type: ", e);
+        return undefined;
+    }
+
+    try {
+        switch(msgType) {
+            case V3MessageType.KEEP_ALIVE: {
+                return {
+                    message: {
+                        type: msgType
+                    },
+                    newOffset: offset + 1
+                };
+            }
+            case V3MessageType.CLIENT_HELLO: {
+                const result = clientHelloMessageFromBuffer(buf, offset);
+                return {
+                    message: result.message,
+                    newOffset: result.newOffset
+                };
+            }
+            case V3MessageType.PROTO_VERSION_UNSUPPORTED: {
+                const result = protoVersionUnsupportedMessageFromBuffer(buf, offset);
+                return {
+                    message: result.message,
+                    newOffset: result.newOffset
+                }
+            }
+            case V3MessageType.SERVER_HELLO_COMPLETE: {
+                return {
+                    message: {
+                        type: msgType
+                    },
+                    newOffset: offset + 1
+                }
+            }
+            case V3MessageType.SERVER_HELLO: {
+                const result = serverHelloMessageFromBuffer(buf, offset);
+                return {
+                    message: result.message,
+                    newOffset: result.newOffset
+                }
+            }
+            case V3MessageType.CLIENT_HELLO_COMPLETE: {
+                const result = clientHelloCompleteMessageFromBuffer(buf, offset);
+                return {
+                    ...result
+                };
+            }
+            case V3MessageType.ENTRY_UPDATE: {
+                const result = entryUpdateMessageFromBuffer(buf, offset);
+                return {
+                    ...result
+                }
+            }
+            case V3MessageType.ENTRY_ASSIGNMENT: {
+                const result = entryAssignmentMessageFromBuffer(buf, offset);
+                return {
+                    ...result
+                }
+            }
+            case V3MessageType.ENTRY_FLAGS_UPDATE: {
+                const result = entryFlagsUpdateMessageFromBuffer(buf, offset);
+                return {
+                    ...result
+                }
+            }
+            case V3MessageType.ENTRY_DELETE: {
+                const result = entryDeleteMessageFromBuffer(buf, offset);
+                return {
+                    ...result
+                }
+            }
+            case V3MessageType.CLEAR_ALL_ENTRIES: {
+                const result = clearAllEntriesMessageFromBuffer(buf, offset);
+                return {
+                    ...result
+                }
+            }
+            // TODO RPC
+        }
+    }
+    catch(e) {
+        console.log("Error while parsing message: ", e);
+        return undefined;
     }
 }
