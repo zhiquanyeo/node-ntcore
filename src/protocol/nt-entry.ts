@@ -31,5 +31,5 @@ export default interface NTEntry {
     id: number;
     value: NTEntryValue;
     seq: number;
-    flags: NTEntryFlags
+    flags?: NTEntryFlags
 }

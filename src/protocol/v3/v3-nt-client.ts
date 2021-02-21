@@ -1,10 +1,11 @@
 import StrictEventEmitter from "strict-event-emitter-types";
 import NTClient, { NTClientOptions } from "../nt-client";
 import { EventEmitter } from "events";
-import { NTtoV3EntryType, V3ClientHandshakeState, V3EntryFlags, V3EntryType, V3MessageType, V3MessageTypeToString, V3RPCDefinition, V3toNTEntryType } from "./v3-types";
-import { clientHelloCompleteMessageToBuffer, clientHelloMessageToBuffer, entryAssignmentMessageToBuffer, entryUpdateMessageToBuffer, getNextAvailableMessage, V3ClearAllEntriesMessage, V3EntryAssignmentMessage, V3EntryDeleteMessage, V3EntryFlagsUpdateMessage, V3EntryUpdateMessage, V3Message, V3MessageWrapper, V3ProtoVersionUnsupportedMessage, V3RPCResponseMessage } from "./v3-messages";
-import NTEntry, { NTEntryType } from "../nt-entry";
+import { NTtoV3EntryType, V3ClientHandshakeState, V3EntryFlags, V3EntryType, V3MessageType, V3MessageTypeToString, V3RPCDefinition, V3toNTEntryType, V3_DEFAULT_FLAGS } from "./v3-types";
+import { clientHelloCompleteMessageToBuffer, clientHelloMessageToBuffer, entryAssignmentMessageToBuffer, entryDeleteMessageToBuffer, entryFlagsUpdateMessageToBuffer, entryUpdateMessageToBuffer, getNextAvailableMessage, V3ClearAllEntriesMessage, V3EntryAssignmentMessage, V3EntryDeleteMessage, V3EntryFlagsUpdateMessage, V3EntryUpdateMessage, V3Message, V3MessageWrapper, V3ProtoVersionUnsupportedMessage, V3RPCResponseMessage } from "./v3-messages";
+import NTEntry, { NTEntryFlags, NTEntryType } from "../nt-entry";
 import { NTEntryNotFoundError, NTEntryTypeMismatchError, NTEventUpdateSource, NTProtocolVersion, NTProtocolVersionUnsupportedError } from "../nt-types";
+import { ntValueIsEqual } from "../protocol-utils";
 
 export interface V3ClientOptions extends NTClientOptions {
 
@@ -209,7 +210,7 @@ export default class V3NTClient extends NTClient {
     }
 
     // Public API
-    public setBoolean(key: string, val: boolean, flags?: V3EntryFlags): boolean {
+    public setBoolean(key: string, val: boolean): boolean {
         const newEntry: NTEntry = {
             type: NTEntryType.BOOLEAN,
             name: key,
@@ -218,7 +219,6 @@ export default class V3NTClient extends NTClient {
             },
             id: 0xFFFF,
             seq: 0,
-            flags: flags ? flags : { persistent: false }
         }
 
         return this._setEntryData(newEntry);
@@ -228,7 +228,7 @@ export default class V3NTClient extends NTClient {
         return this._getEntry(key, NTEntryType.BOOLEAN).value.bool;
     }
 
-    public setDouble(key: string, val: number, flags?: V3EntryFlags): boolean {
+    public setDouble(key: string, val: number): boolean {
         const newEntry: NTEntry = {
             type: NTEntryType.DOUBLE,
             name: key,
@@ -237,7 +237,6 @@ export default class V3NTClient extends NTClient {
             },
             id: 0xFFFF,
             seq: 0,
-            flags: flags ? flags : { persistent: false }
         }
 
         return this._setEntryData(newEntry);
@@ -247,7 +246,7 @@ export default class V3NTClient extends NTClient {
         return this._getEntry(key, NTEntryType.DOUBLE).value.double;
     }
 
-    public setString(key: string, val: string, flags?: V3EntryFlags): boolean {
+    public setString(key: string, val: string): boolean {
         const newEntry: NTEntry = {
             type: NTEntryType.STRING,
             name: key,
@@ -256,7 +255,6 @@ export default class V3NTClient extends NTClient {
             },
             id: 0xFFFF,
             seq: 0,
-            flags: flags ? flags : { persistent: false }
         }
 
         return this._setEntryData(newEntry);
@@ -266,7 +264,7 @@ export default class V3NTClient extends NTClient {
         return this._getEntry(key, NTEntryType.STRING).value.str;
     }
 
-    public setBooleanArray(key: string, val: boolean[], flags?: V3EntryFlags): boolean {
+    public setBooleanArray(key: string, val: boolean[]): boolean {
         const newEntry: NTEntry = {
             type: NTEntryType.BOOLEAN_ARRAY,
             name: key,
@@ -275,7 +273,6 @@ export default class V3NTClient extends NTClient {
             },
             id: 0xFFFF,
             seq: 0,
-            flags: flags ? flags : { persistent: false }
         }
 
         return this._setEntryData(newEntry);
@@ -285,7 +282,7 @@ export default class V3NTClient extends NTClient {
         return this._getEntry(key, NTEntryType.BOOLEAN_ARRAY).value.bool_array;
     }
 
-    public setDoubleArray(key: string, val: number[], flags?: V3EntryFlags): boolean {
+    public setDoubleArray(key: string, val: number[]): boolean {
         const newEntry: NTEntry = {
             type: NTEntryType.DOUBLE_ARRAY,
             name: key,
@@ -294,7 +291,6 @@ export default class V3NTClient extends NTClient {
             },
             id: 0xFFFF,
             seq: 0,
-            flags: flags ? flags : { persistent: false }
         }
 
         return this._setEntryData(newEntry);
@@ -304,7 +300,7 @@ export default class V3NTClient extends NTClient {
         return this._getEntry(key, NTEntryType.DOUBLE_ARRAY).value.double_array;
     }
 
-    public setStringArray(key: string, val: string[], flags?: V3EntryFlags): boolean {
+    public setStringArray(key: string, val: string[]): boolean {
         const newEntry: NTEntry = {
             type: NTEntryType.STRING_ARRAY,
             name: key,
@@ -313,7 +309,6 @@ export default class V3NTClient extends NTClient {
             },
             id: 0xFFFF,
             seq: 0,
-            flags: flags ? flags : { persistent: false }
         }
 
         return this._setEntryData(newEntry);
@@ -323,7 +318,7 @@ export default class V3NTClient extends NTClient {
         return this._getEntry(key, NTEntryType.STRING_ARRAY).value.str_array;
     }
 
-    public setRaw(key: string, val: Buffer, flags?: V3EntryFlags): boolean {
+    public setRaw(key: string, val: Buffer): boolean {
         const newEntry: NTEntry = {
             type: NTEntryType.RAW,
             name: key,
@@ -332,7 +327,6 @@ export default class V3NTClient extends NTClient {
             },
             id: 0xFFFF,
             seq: 0,
-            flags: flags ? flags : { persistent: false }
         }
 
         return this._setEntryData(newEntry);
@@ -344,6 +338,54 @@ export default class V3NTClient extends NTClient {
         entryBuffer.copy(bufCopy);
 
         return bufCopy;
+    }
+
+    public deleteEntry(key: string): boolean {
+        if (this._entryNameToId.has(key)) {
+            const entryId = this._entryNameToId.get(key);
+            const entry = this._entries.get(entryId);
+
+            this._entries.delete(entryId);
+            this._entryNameToId.delete(key);
+
+            this._write(entryDeleteMessageToBuffer({
+                type: V3MessageType.ENTRY_DELETE,
+                entryId
+            }));
+
+            this.emit("entryDeleted", {
+                source: NTEventUpdateSource.LOCAL,
+                entry: {...entry}
+            });
+
+            return true;
+        }
+
+        return false;
+    }
+
+    public updateEntryFlags(key: string, flags: NTEntryFlags): boolean {
+        if (this._entryNameToId.has(key)) {
+            const entryId = this._entryNameToId.get(key);
+            const entry = this._entries.get(entryId);
+
+            entry.flags = (flags as V3EntryFlags);
+
+            this._write(entryFlagsUpdateMessageToBuffer({
+                type: V3MessageType.ENTRY_FLAGS_UPDATE,
+                entryId,
+                entryFlags: entry.flags
+            }));
+
+            this.emit("entryFlagsUpdated", {
+                source: NTEventUpdateSource.LOCAL,
+                entry: {...entry}
+            });
+
+            return true;
+        }
+
+        return false;
     }
 
     protected _handshake(): Promise<void> {
@@ -449,21 +491,26 @@ export default class V3NTClient extends NTClient {
                     }
                 }
             }
-            // We care about ENTRY_ASSIGNMENT, ENTRY_UPDATE, ENTRY_FLAG_UPDATE
-            // ENTRY_DELETE, CLEAR_ALL_ENTRIES
-            // TBD RPC
         }
     }
 
     private _handleEntryAssignment(msg: V3EntryAssignmentMessage) {
+        let pendingEntryChanged = false;
+        let isPendingEntry = false;
+
         // Getting an entry assignment from the server
         if (this._entryNameToId.has(msg.entryName)) {
             throw new Error(`Client has an existing key ${msg.entryName}`);
         }
         else if (this._pendingEntries.has(msg.entryName)) {
+            isPendingEntry = true;
             // Promote this pending entry into a real entry
             console.log(`Promoting ${msg.entryName} from pending to full entry`);
-            // TODO see if the value differs...
+            
+            const pendingEntry = this._pendingEntries.get(msg.entryName);
+            if (!ntValueIsEqual(pendingEntry.value, msg.entryValue)) {
+                pendingEntryChanged = true;
+            }
             this._pendingEntries.delete(msg.entryName);
         }
     
@@ -481,13 +528,23 @@ export default class V3NTClient extends NTClient {
 
         if (msg.entryType === V3EntryType.RPC) {
             this._rpcDefinitions.set(msg.entryId, (msg.entryValue as V3RPCDefinition));
-            console.log(`Added new RPC Definiteion ${msg.entryName}: `, msg.entryValue);
+            console.log(`Added new RPC Definition ${msg.entryName}: `, msg.entryValue);
         }
 
-        this.emit("entryAdded", {
-            source: NTEventUpdateSource.REMOTE,
-            entry: {...this._entries.get(msg.entryId)}
-        });
+        if (!isPendingEntry) {
+            // If this wasn't a pending entry, it means it came from the remote
+            this.emit("entryAdded", {
+                source: NTEventUpdateSource.REMOTE,
+                entry: {...this._entries.get(msg.entryId)}
+            });
+        }
+        else if (pendingEntryChanged) {
+            // If we did have a pending entry (and it changed)
+            this.emit("entryUpdated", {
+                source: NTEventUpdateSource.REMOTE,
+                entry: {...this._entries.get(msg.entryId)}
+            });
+        }
     }
 
     private _handleEntryUpdate(msg: V3EntryUpdateMessage) {
@@ -551,10 +608,10 @@ export default class V3NTClient extends NTClient {
                 return false;
             }
 
-            // TODO - Could check to make sure that the data differs
-            // before we send is
-            // Similarly, could check for flag differences and also tack
-            // on a FlagUpdate message
+            if (ntValueIsEqual(currEntry.value, newEntry.value)) {
+                // Bail out early if the values are the same
+                return true;
+            }
 
             newEntry.id = currEntryId;
             newEntry.seq = currEntry.seq + 1;
@@ -569,13 +626,28 @@ export default class V3NTClient extends NTClient {
                 entrySeq: newEntry.seq,
                 entryValue: newEntry.value
             }));
+
+            // We should emit a LOCAL entryUpdate message here
+            this.emit("entryUpdated", {
+                source: NTEventUpdateSource.LOCAL,
+                entry: {...newEntry}
+            });
         }
         else if (this._pendingEntries.has(key)) {
             // If a pending message exists with this key, just update the record
             this._pendingEntries.set(key, newEntry);
+
+            // This is a LOCAL change only since it's still pending
+            this.emit("entryUpdated", {
+                source: NTEventUpdateSource.LOCAL,
+                entry: {...newEntry}
+            });
         }
         else {
             // Need to create a new record
+            newEntry.seq = 0;
+            newEntry.id = 0xFFFF;
+
             this._pendingEntries.set(key, newEntry);
             this._write(entryAssignmentMessageToBuffer({
                 type: V3MessageType.ENTRY_ASSIGNMENT,
@@ -584,8 +656,13 @@ export default class V3NTClient extends NTClient {
                 entrySeq: 0,
                 entryValue: newEntry.value,
                 entryName: newEntry.name,
-                entryFlags: newEntry.flags
+                entryFlags: newEntry.flags ? newEntry.flags : V3_DEFAULT_FLAGS
             }));
+
+            this.emit("entryAdded", {
+                source: NTEventUpdateSource.LOCAL,
+                entry: {...newEntry}
+            });
         }
 
         return true;

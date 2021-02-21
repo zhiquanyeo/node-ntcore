@@ -13,4 +13,20 @@ let val = true;
 setInterval(() => {
     clientV3.setBoolean("/My/SuperCool/Variable", val);
     val = !val;
-}, 1000);
+}, 2000);
+
+clientV3.on("entryAdded", evt => {
+    console.log("entryAdded", evt);
+});
+
+clientV3.on("entryUpdated", evt => {
+    console.log("entryUpdated", evt);
+});
+
+clientV3.on("entryDeleted", evt => {
+    console.log("entryDeleted", evt);
+});
+
+clientV3.on("entryFlagsUpdated", evt => {
+    console.log("entryFlagsUpdated", evt);
+});

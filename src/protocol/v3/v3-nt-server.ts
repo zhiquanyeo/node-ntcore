@@ -1,11 +1,12 @@
 import StrictEventEmitter from "strict-event-emitter-types";
 import { EventEmitter } from "events";
 import { Socket } from "net";
-import { NTtoV3EntryType, V3EntryFlags, V3MessageType, V3MessageTypeToString, V3RPCDefinition, V3ServerHandshakeState, V3toNTEntryType } from "./v3-types";
-import { NTEntryNotFoundError, NTEntryTypeMismatchError, NTProtocolVersion } from "../nt-types";
-import NTEntry, { NTEntryType } from "../nt-entry";
+import { NTtoV3EntryType, V3EntryFlags, V3MessageType, V3MessageTypeToString, V3RPCDefinition, V3ServerHandshakeState, V3toNTEntryType, V3_DEFAULT_FLAGS } from "./v3-types";
+import { NTEntryNotFoundError, NTEntryTypeMismatchError, NTEventUpdateSource, NTProtocolVersion } from "../nt-types";
+import NTEntry, { NTEntryFlags, NTEntryType } from "../nt-entry";
 import NTServer, { NTServerOptions } from "../nt-server";
 import { clearAllEntriesMessageToBuffer, entryAssignmentMessageToBuffer, entryDeleteMessageToBuffer, entryFlagsUpdateMessageToBuffer, entryUpdateMessageToBuffer, getNextAvailableMessage, serverHelloCompleteMessageToBuffer, serverHelloMessageToBuffer, V3ClearAllEntriesMessage, V3EntryAssignmentMessage, V3EntryDeleteMessage, V3EntryFlagsUpdateMessage, V3EntryUpdateMessage, V3Message, V3MessageWrapper, V3RPCExecuteMessage } from "./v3-messages";
+import { ntValueIsEqual } from "../protocol-utils";
 
 export interface V3ServerOptions extends NTServerOptions {
 
@@ -127,7 +128,7 @@ export default class V3NTServer extends NTServer {
         super({ major: 3, minor: 0 }, options);
     }
 
-    public setBoolean(key: string, val: boolean, flags?: V3EntryFlags): boolean {
+    public setBoolean(key: string, val: boolean): boolean {
         const newEntry: NTEntry = {
             type: NTEntryType.BOOLEAN,
             name: key,
@@ -136,7 +137,6 @@ export default class V3NTServer extends NTServer {
             },
             id: 0xFFFF,
             seq: 0,
-            flags: flags ? flags : { persistent: false }
         };
 
         return this._setEntryData(newEntry);
@@ -146,7 +146,7 @@ export default class V3NTServer extends NTServer {
         return this._getEntry(key, NTEntryType.BOOLEAN).value.bool;
     }
 
-    public setDouble(key: string, val: number, flags?: V3EntryFlags): boolean {
+    public setDouble(key: string, val: number): boolean {
         const newEntry: NTEntry = {
             type: NTEntryType.DOUBLE,
             name: key,
@@ -155,7 +155,6 @@ export default class V3NTServer extends NTServer {
             },
             id: 0xFFFF,
             seq: 0,
-            flags: flags ? flags : { persistent: false }
         };
 
         return this._setEntryData(newEntry);
@@ -165,7 +164,7 @@ export default class V3NTServer extends NTServer {
         return this._getEntry(key, NTEntryType.DOUBLE).value.double;
     }
 
-    public setString(key: string, val: string, flags?: V3EntryFlags): boolean {
+    public setString(key: string, val: string): boolean {
         const newEntry: NTEntry = {
             type: NTEntryType.STRING,
             name: key,
@@ -174,7 +173,6 @@ export default class V3NTServer extends NTServer {
             },
             id: 0xFFFF,
             seq: 0,
-            flags: flags ? flags : { persistent: false }
         };
 
         return this._setEntryData(newEntry);
@@ -184,7 +182,7 @@ export default class V3NTServer extends NTServer {
         return this._getEntry(key, NTEntryType.STRING).value.str;
     }
 
-    public setBooleanArray(key: string, val: boolean[], flags?: V3EntryFlags): boolean {
+    public setBooleanArray(key: string, val: boolean[]): boolean {
         const newEntry: NTEntry = {
             type: NTEntryType.BOOLEAN_ARRAY,
             name: key,
@@ -193,7 +191,6 @@ export default class V3NTServer extends NTServer {
             },
             id: 0xFFFF,
             seq: 0,
-            flags: flags ? flags : { persistent: false }
         };
 
         return this._setEntryData(newEntry);
@@ -203,7 +200,7 @@ export default class V3NTServer extends NTServer {
         return this._getEntry(key, NTEntryType.BOOLEAN_ARRAY).value.bool_array;
     }
 
-    public setDoubleArray(key: string, val: number[], flags?: V3EntryFlags): boolean {
+    public setDoubleArray(key: string, val: number[]): boolean {
         const newEntry: NTEntry = {
             type: NTEntryType.DOUBLE_ARRAY,
             name: key,
@@ -212,7 +209,6 @@ export default class V3NTServer extends NTServer {
             },
             id: 0xFFFF,
             seq: 0,
-            flags: flags ? flags : { persistent: false }
         };
 
         return this._setEntryData(newEntry);
@@ -222,7 +218,7 @@ export default class V3NTServer extends NTServer {
         return this._getEntry(key, NTEntryType.DOUBLE_ARRAY).value.double_array;
     }
 
-    public setStringArray(key: string, val: string[], flags?: V3EntryFlags): boolean {
+    public setStringArray(key: string, val: string[]): boolean {
         const newEntry: NTEntry = {
             type: NTEntryType.STRING_ARRAY,
             name: key,
@@ -231,7 +227,6 @@ export default class V3NTServer extends NTServer {
             },
             id: 0xFFFF,
             seq: 0,
-            flags: flags ? flags : { persistent: false }
         };
 
         return this._setEntryData(newEntry);
@@ -241,7 +236,7 @@ export default class V3NTServer extends NTServer {
         return this._getEntry(key, NTEntryType.STRING_ARRAY).value.str_array;
     }
 
-    public setRaw(key: string, val: Buffer, flags?: V3EntryFlags): boolean {
+    public setRaw(key: string, val: Buffer): boolean {
         const newEntry: NTEntry = {
             type: NTEntryType.RAW,
             name: key,
@@ -250,7 +245,6 @@ export default class V3NTServer extends NTServer {
             },
             id: 0xFFFF,
             seq: 0,
-            flags: flags ? flags : { persistent: false }
         };
 
         return this._setEntryData(newEntry);
@@ -260,9 +254,55 @@ export default class V3NTServer extends NTServer {
         return this._getEntry(key, NTEntryType.RAW).value.raw;
     }
 
-    protected _onSocketConnected(socket: Socket) {
-        // Create a new NTClientConnection
+    public deleteEntry(key: string): boolean {
+        if (this._entryNameToId.has(key)) {
+            const entryId = this._entryNameToId.get(key);
+            const entry = this._entries.get(entryId);
 
+            this._entries.delete(entryId);
+            this._entryNameToId.delete(key);
+
+            this._broadcast(null, entryDeleteMessageToBuffer({
+                type: V3MessageType.ENTRY_DELETE,
+                entryId
+            }));
+
+            this.emit("entryDeleted", {
+                source: NTEventUpdateSource.LOCAL,
+                entry: {...entry}
+            });
+
+            return true;
+        }
+
+        return false;
+    }
+
+    public updateEntryFlags(key: string, flags: NTEntryFlags): boolean {
+        if (this._entryNameToId.has(key)) {
+            const entryId = this._entryNameToId.get(key);
+            const entry = this._entries.get(entryId);
+
+            entry.flags = (flags as V3EntryFlags);
+
+            this._broadcast(null, entryFlagsUpdateMessageToBuffer({
+                type: V3MessageType.ENTRY_FLAGS_UPDATE,
+                entryId,
+                entryFlags: entry.flags
+            }));
+
+            this.emit("entryFlagsUpdated", {
+                source: NTEventUpdateSource.LOCAL,
+                entry: {...entry}
+            });
+
+            return true;
+        }
+
+        return false;
+    }
+
+    protected _onSocketConnected(socket: Socket) {
         const conn = new NTClientConnection(socket, this._identifier, this._entries);
         this._connections.push(conn);
 
@@ -295,6 +335,12 @@ export default class V3NTServer extends NTServer {
 
                 // Broadcast
                 this._broadcast(null, entryAssignmentMessageToBuffer(msg));
+
+                // Emit the entryAdded event
+                this.emit("entryAdded", {
+                    source: NTEventUpdateSource.REMOTE,
+                    entry: {...this._entries.get(entryId)}
+                });
             }
         });
 
@@ -302,28 +348,31 @@ export default class V3NTServer extends NTServer {
             if (this._entries.has(msg.entryId)) {
                 const entry = this._entries.get(msg.entryId);
 
-                let excludeConn: NTClientConnection | null = conn;
-
                 if (msg.entrySeq <= entry.seq) {
                     // the client sequence number is less than ours. reject this
-                    excludeConn = null;
+                    return;
                 }
-                else {
-                    entry.seq = msg.entrySeq;
-                }
-
+                
+                // Update the sequence number
+                entry.seq = msg.entrySeq;
+                
                 if (entry.type !== V3toNTEntryType.get(msg.entryType)) {
                     return;
                 }
 
                 entry.value = {...msg.entryValue};
-                this._broadcast(excludeConn, entryUpdateMessageToBuffer({
+                this._broadcast(conn, entryUpdateMessageToBuffer({
                     type: V3MessageType.ENTRY_UPDATE,
                     entryId: entry.id,
                     entrySeq: entry.seq,
                     entryType: NTtoV3EntryType.get(entry.type),
                     entryValue: entry.value
                 }));
+
+                this.emit("entryUpdated", {
+                    source: NTEventUpdateSource.REMOTE,
+                    entry: {...entry}
+                });
             }
         });
 
@@ -333,6 +382,11 @@ export default class V3NTServer extends NTServer {
                 entry.flags = {...msg.entryFlags};
 
                 this._broadcast(conn, entryFlagsUpdateMessageToBuffer(msg));
+
+                this.emit("entryFlagsUpdated", {
+                    source: NTEventUpdateSource.REMOTE,
+                    entry: {...entry}
+                });
             }
         });
 
@@ -344,6 +398,11 @@ export default class V3NTServer extends NTServer {
                 this._entryNameToId.delete(entry.name);
 
                 this._broadcast(conn, entryDeleteMessageToBuffer(msg));
+
+                this.emit("entryDeleted", {
+                    source: NTEventUpdateSource.REMOTE,
+                    entry: {...entry}
+                });
             }
         });
 
@@ -382,6 +441,10 @@ export default class V3NTServer extends NTServer {
                 return false;
             }
 
+            if (ntValueIsEqual(currEntry.value, newEntry.value)) {
+                return true;
+            }
+
             newEntry.id = currEntryId;
             newEntry.seq = currEntry.seq + 1;
             newEntry.flags = currEntry.flags;
@@ -396,6 +459,11 @@ export default class V3NTServer extends NTServer {
                 entrySeq: newEntry.seq,
                 entryValue: newEntry.value
             }));
+
+            this.emit("entryUpdated", {
+                source: NTEventUpdateSource.LOCAL,
+                entry: {...newEntry}
+            });
         }
         else {
             // This is a new field
@@ -414,9 +482,14 @@ export default class V3NTServer extends NTServer {
                 entryId: newEntry.id,
                 entrySeq: newEntry.seq,
                 entryName: newEntry.name,
-                entryFlags: newEntry.flags,
+                entryFlags: newEntry.flags ? newEntry.flags : V3_DEFAULT_FLAGS,
                 entryValue: newEntry.value
             }));
+
+            this.emit("entryAdded", {
+                source: NTEventUpdateSource.LOCAL,
+                entry: {...newEntry}
+            });
         }
 
         return true;

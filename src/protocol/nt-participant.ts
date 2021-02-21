@@ -1,6 +1,7 @@
 import StrictEventEmitter from "strict-event-emitter-types";
 import { EventEmitter } from "events";
 import { NTConnectionState, NTEntryEvent, NTProtocolVersion } from "./nt-types";
+import { NTEntryFlags } from "./nt-entry";
 
 export interface NTParticipantOptions {
     identifier?: string;
@@ -68,6 +69,9 @@ export default abstract class NTParticipant extends (EventEmitter as new () => N
 
     public abstract setRaw(key: string, val: Buffer): boolean;
     public abstract getRaw(key: string): Buffer;
+
+    public abstract deleteEntry(key: string): boolean;
+    public abstract updateEntryFlags(key: string, flags: NTEntryFlags): boolean;
     // TODO RPC
 
     protected _setConnectionState(state: NTConnectionState) {

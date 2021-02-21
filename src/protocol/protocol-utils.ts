@@ -1,3 +1,6 @@
+import fastDeepEqual from "fast-deep-equal";
+import { NTEntryValue } from "./nt-entry";
+
 export interface NetworkEndpointInfo {
     address: string;
     port: number;
@@ -102,4 +105,8 @@ export function decodeLEB128String(buf: Buffer, offset: number = 0): LEB128Strin
         offset: end,
         value: buf.slice(decodeResult.offset, end).toString("utf-8")
     }
+}
+
+export function ntValueIsEqual(a: NTEntryValue, b: NTEntryValue) {
+    return fastDeepEqual(a, b);
 }

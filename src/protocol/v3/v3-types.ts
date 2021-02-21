@@ -112,6 +112,10 @@ export interface V3EntryFlags extends NTEntryFlags {
     persistent: boolean;
 }
 
+export const V3_DEFAULT_FLAGS: V3EntryFlags = {
+    persistent: false
+}
+
 export interface V3RPCDefinition {
     name: string;
     parameters: V3RPCParameter[];
