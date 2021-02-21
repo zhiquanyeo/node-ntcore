@@ -9,10 +9,9 @@ export interface NTClientOptions extends NTParticipantOptions {
 
 export default abstract class NTClient extends NTParticipant {
     protected _socket: RRSocket;
-    private _currState: NTConnectionState = NTConnectionState.NTCONN_NOT_CONNECTED;
     
     protected constructor(version: NTProtocolVersion, options: NTClientOptions = { address: "localhost", port: 1735}) {
-        super();
+        super(options);
 
         this._version = version;
 
@@ -84,16 +83,7 @@ export default abstract class NTClient extends NTParticipant {
         return this._socket.write(data);
     }
 
-    private _setConnectionState(state: NTConnectionState) {
-        if (this._currState !== state) {
-            this.emit("connectionStateChanged", 
-                this._currState,
-                state
-            );
-            this._currState = state;
-        }
-
-    }
+    
 
     protected abstract _handshake(): Promise<void>;
     protected abstract _handleData(data: Buffer): void;

@@ -24,6 +24,7 @@ type NTAccessorEventEmitter = StrictEventEmitter<EventEmitter, NTAccessorEvents>
 export default abstract class NTParticipant extends (EventEmitter as new () => NTAccessorEventEmitter) {
     protected _version: NTProtocolVersion = { major: -1, minor: -1 };
     protected _identifier: string = "";
+    protected _currState: NTConnectionState = NTConnectionState.NTCONN_NOT_CONNECTED;
 
     constructor(options: NTParticipantOptions = {}) {
         super();
@@ -68,4 +69,14 @@ export default abstract class NTParticipant extends (EventEmitter as new () => N
     public abstract setRaw(key: string, val: Buffer): boolean;
     public abstract getRaw(key: string): Buffer;
     // TODO RPC
+
+    protected _setConnectionState(state: NTConnectionState) {
+        if (this._currState !== state) {
+            this.emit("connectionStateChanged", 
+                this._currState,
+                state
+            );
+            this._currState = state;
+        }
+    }
 }

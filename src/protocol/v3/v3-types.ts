@@ -101,6 +101,13 @@ export enum V3ClientHandshakeState {
     V3HS_COMPLETE
 }
 
+// States for the Server-side handshake state machine
+export enum V3ServerHandshakeState {
+    AWAIT_CLIENT_HELLO,
+    AWAIT_CLIENT_HELLO_COMPLETE,
+    COMPLETE
+}
+
 export interface V3EntryFlags extends NTEntryFlags {
     persistent: boolean;
 }
