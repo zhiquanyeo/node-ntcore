@@ -17,41 +17,12 @@ export default abstract class NTServer extends NTParticipant {
 
     protected constructor(version: NTProtocolVersion, options: NTServerOptions = { port: 1735 }) {
         super(options);
-        
+
         this._options = options;
         this._version = version;
 
         this._server = net.createServer(async (socket) => {
             this._onSocketConnected(socket);
-
-            // // When a socket connects, we should run through the handshake procedure
-            // try {
-            //     const identifier = await this._connectionHandshake(socket);
-            //     // If we got past the handshake, add this to our list
-
-            //     this._connections.push({
-            //         identifier,
-            //         socket
-            //     });
-
-            //     // Hook up events
-            //     socket.on("data", (data: Buffer) => {
-            //         this._handleSocketData(socket, data);
-            //     });
-
-            //     socket.on("close", () => {
-            //         for (let i = 0; i < this._connections.length; i++) {
-            //             if (this._connections[i].socket === socket) {
-            //                 console.log(`Removing Socket ${this._connections[i].identifier} from list`);
-            //                 this._connections.splice(i, 1);
-            //                 break;
-            //             }
-            //         }
-            //     });
-            // }
-            // catch (err) {
-            //     socket.destroy();
-            // }
         });
     }
 
@@ -69,6 +40,5 @@ export default abstract class NTServer extends NTParticipant {
     }
 
     protected abstract _onSocketConnected(socket: Socket): void;
-    protected abstract _connectionHandshake(socket: Socket): Promise<string>;
-    protected abstract _handleSocketData(socket: Socket, data: Buffer): void;
+
 }

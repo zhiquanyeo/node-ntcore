@@ -17,7 +17,7 @@ type NTAccessorEventEmitter = StrictEventEmitter<EventEmitter, NTAccessorEvents>
 
 /**
  * Abstract class representing a Network Table Participant (NTParticipant)
- * 
+ *
  * A NTParticipant could be either a server or a client, and represents a node in
  * the NetworkTables network.
  */
@@ -28,12 +28,12 @@ export default abstract class NTParticipant extends (EventEmitter as new () => N
 
     constructor(options: NTParticipantOptions = {}) {
         super();
-        
+
         if (options.identifier) {
             this._identifier = options.identifier;
         }
         else {
-            this._identifier = `NTAccessor-${Date.now()}`;
+            this._identifier = `NTParticipant-${Date.now()}`;
         }
     }
 
@@ -72,7 +72,7 @@ export default abstract class NTParticipant extends (EventEmitter as new () => N
 
     protected _setConnectionState(state: NTConnectionState) {
         if (this._currState !== state) {
-            this.emit("connectionStateChanged", 
+            this.emit("connectionStateChanged",
                 this._currState,
                 state
             );
