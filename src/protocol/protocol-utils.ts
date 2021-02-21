@@ -1,10 +1,6 @@
 import fastDeepEqual from "fast-deep-equal";
+import { NetworkEndpointInfo } from "../transport/transport-types";
 import { NTEntryValue } from "./nt-entry";
-
-export interface NetworkEndpointInfo {
-    address: string;
-    port: number;
-}
 
 export function parseNetworkEndpointInfo(address: string, port: number): NetworkEndpointInfo {
     // Prepend the protocol if there isn't one

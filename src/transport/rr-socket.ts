@@ -1,11 +1,17 @@
 import { EventEmitter } from "events";
 import { Socket } from "net";
+import { NetworkEndpointInfo } from "./transport-types";
 
 export interface RRSocketOptions {
     address?: string;
     port?: number;
     reconnectDelay?: number;
     ident?: string;
+}
+
+export interface AddressPortInfo {
+    address: string;
+    port: number;
 }
 
 /**
@@ -79,6 +85,18 @@ export default class RRSocket extends EventEmitter {
 
     public get connected(): boolean {
         return this._socketConnected;
+    }
+
+    public setNetworkEndpoint(endpoint: NetworkEndpointInfo): void {
+        if (endpoint.address !== this._address || endpoint.port !== this._port) {
+            this._address = endpoint.address;
+            this._port = endpoint.port;
+
+            if (this._socketConnected) {
+                this.disconnect();
+                this.connect();
+            }
+        }
     }
 
     public connect() {
