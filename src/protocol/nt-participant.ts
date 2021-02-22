@@ -46,6 +46,10 @@ export default abstract class NTParticipant extends (EventEmitter as new () => N
         return this._identifier;
     }
 
+    public set identifier(val: string) {
+        this._identifier = val;
+    }
+
     public abstract start(): void;
     public abstract stop(): void;
 

@@ -1,3 +1,4 @@
+import { NetworkEndpointInfo } from "../transport/transport-types";
 import RRSocket from "../transport/rr-socket";
 import NTParticipant, { NTParticipantOptions } from "./nt-participant";
 import { NTConnectionState, NTProtocolVersion, NTProtocolVersionUnsupportedError } from "./nt-types";
@@ -67,6 +68,10 @@ export default abstract class NTClient extends NTParticipant {
 
     public get port(): number {
         return this._socket.port;
+    }
+
+    public setServerEndpoint(endpoint: NetworkEndpointInfo) {
+        this._socket.setNetworkEndpoint(endpoint);
     }
 
     public start() {
