@@ -404,18 +404,47 @@ export default class V3NTClient extends NTClient {
                     this._rpcDefinitions.clear();
 
                     data.clientSideEntries.forEach((entry, name) => {
+                        // TODO We should broadcast the events here
+                        // Also, we should check to see if we already had 
+                        // an existing record, which would mean that we've
+                        // reconnected to a server
                         if (entry.id !== 0xFFFF) {
                             // Real, server-assigned record
+                            let sendUpdateEvent: boolean = false;
+                            if (this._entryNameToId.has(entry.name)) {
+                                // TODO This is something that we already have
+                                // send an update event
+                                sendUpdateEvent = true;
+                            }
+
                             this._entries.set(entry.id, {...entry});
                             this._entryNameToId.set(entry.name, entry.id);
 
                             if (entry.type === NTEntryType.RPC) {
                                 this._rpcDefinitions.set(entry.id, (entry.value.rpc as V3RPCDefinition));
                             }
+
+                            if (sendUpdateEvent) {
+                                this.emit("entryUpdated", {
+                                    source: NTEventUpdateSource.REMOTE,
+                                    entry: {...entry}
+                                });
+                            }
+                            else {
+                                this.emit("entryAdded", {
+                                    source: NTEventUpdateSource.REMOTE,
+                                    entry: {...entry}
+                                });
+                            }
                         }
                         else {
                             // Pending entry
                             this._pendingEntries.set(entry.name, {...entry});
+
+                            this.emit("entryUpdated", {
+                                source: NTEventUpdateSource.REMOTE,
+                                entry: {...entry}
+                            });
                         }
                     });
 
