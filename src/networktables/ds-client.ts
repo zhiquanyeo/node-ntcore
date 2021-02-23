@@ -1,28 +1,47 @@
 import { EventEmitter } from "events";
 import { Socket } from "net";
+import StrictEventEmitter from "strict-event-emitter-types/types/src";
 
 const DS_INTERFACE_PORT = 1742;
 
-export default class DSClient extends EventEmitter {
+export interface ServerIPAddressInfo {
+    asUInt32: number;
+    asArray: number[];
+    asString: string;
+}
+
+interface DSClientEvents {
+    connected: void;
+    disconnected: void;
+    ipChanged: (addrInfo: ServerIPAddressInfo) => void;
+}
+type DSClientEventEmitter = StrictEventEmitter<EventEmitter, DSClientEvents>;
+
+export default class DSClient extends (EventEmitter as new () => DSClientEventEmitter) {
     private _socket: Socket;
     private _connected: boolean = false;
 
-    private _buffer: Buffer;
+    private _bufferStr: string;
 
     constructor() {
         super();
         this._socket = new Socket();
 
         this._socket.on("data", (data: Buffer) => {
-            if (!this._buffer) {
-                this._buffer = data;
+            if (!this._bufferStr) {
+                this._bufferStr = data.toString();
             }
             else {
-                this._buffer = Buffer.concat([this._buffer, data]);
+                this._bufferStr = this._bufferStr + data.toString();
             }
 
             this._handleData();
         });
+
+        this._socket.on("close", () => {
+            this._connected = false;
+            this.emit("disconnected");
+        })
     }
 
     public start() {
@@ -33,6 +52,7 @@ export default class DSClient extends EventEmitter {
             },
             () => {
                 this._connected = true;
+                this.emit("connected");
             });
         }
     }
@@ -40,10 +60,36 @@ export default class DSClient extends EventEmitter {
     public stop() {
         this._socket.end(() => {
             this._connected = false;
+            this.emit("disconnected")
         });
     }
 
     private _handleData() {
+        // Split on newlines
+        const newlineRegexp = /\n/;
 
+        let match: RegExpExecArray;
+        while ((match = newlineRegexp.exec(this._bufferStr))) {
+            const str = this._bufferStr.substring(0, match.index);
+
+            try {
+                const obj: any = JSON.parse(str);
+                if (obj.robotIP !== undefined) {
+                    const ipUInt32: number = obj.robotIP;
+                    const buf = Buffer.alloc(4);
+                    buf.writeUInt32BE(ipUInt32);
+                    const ipArr = [...buf];
+                    this.emit("ipChanged", {
+                        asUInt32: ipUInt32,
+                        asArray: ipArr,
+                        asString: ipArr.join(".")
+                    });
+                }
+            }
+            catch (err) {
+                console.log("Failed to parse JSON: ", err);
+            }
+            this._bufferStr = this._bufferStr.substring(match.index + 1);
+        }
     }
 }
