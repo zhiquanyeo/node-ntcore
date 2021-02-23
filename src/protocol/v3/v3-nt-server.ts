@@ -106,6 +106,8 @@ export class NTClientConnection extends EventEmitter {
                 } break;
                 case V3MessageType.KEEP_ALIVE:
                     break;
+                case V3MessageType.CLIENT_HELLO_COMPLETE:
+                    break;
                 default: {
                     console.log(`Dropping ${V3MessageTypeToString.get(lastMessage.type)} message (not handled)`);
                 }
@@ -352,10 +354,10 @@ export default class V3NTServer extends NTServer {
                     // the client sequence number is less than ours. reject this
                     return;
                 }
-                
+
                 // Update the sequence number
                 entry.seq = msg.entrySeq;
-                
+
                 if (entry.type !== V3toNTEntryType.get(msg.entryType)) {
                     return;
                 }

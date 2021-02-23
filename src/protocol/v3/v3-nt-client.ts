@@ -173,7 +173,7 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
 export default class V3NTClient extends NTClient {
     private _entryNameToId: Map<string, number> = new Map<string, number>();
     private _entries: Map<number, NTEntry> = new Map<number, NTEntry>();
-    
+
     // RPC Definitions
     private _rpcDefinitions: Map<number, V3RPCDefinition> = new Map<number, V3RPCDefinition>();
 
@@ -405,7 +405,7 @@ export default class V3NTClient extends NTClient {
 
                     data.clientSideEntries.forEach((entry, name) => {
                         // TODO We should broadcast the events here
-                        // Also, we should check to see if we already had 
+                        // Also, we should check to see if we already had
                         // an existing record, which would mean that we've
                         // reconnected to a server
                         if (entry.id !== 0xFFFF) {
@@ -442,7 +442,7 @@ export default class V3NTClient extends NTClient {
                             this._pendingEntries.set(entry.name, {...entry});
 
                             this.emit("entryUpdated", {
-                                source: NTEventUpdateSource.REMOTE,
+                                source: NTEventUpdateSource.LOCAL,
                                 entry: {...entry}
                             });
                         }
@@ -535,14 +535,14 @@ export default class V3NTClient extends NTClient {
             isPendingEntry = true;
             // Promote this pending entry into a real entry
             console.log(`Promoting ${msg.entryName} from pending to full entry`);
-            
+
             const pendingEntry = this._pendingEntries.get(msg.entryName);
             if (!ntValueIsEqual(pendingEntry.value, msg.entryValue)) {
                 pendingEntryChanged = true;
             }
             this._pendingEntries.delete(msg.entryName);
         }
-    
+
         this._entries.set(msg.entryId, {
             name: msg.entryName,
             id: msg.entryId,
@@ -594,7 +594,7 @@ export default class V3NTClient extends NTClient {
         if (this._entries.has(msg.entryId)) {
             const entry = this._entries.get(msg.entryId);
             entry.flags = {...msg.entryFlags};
-            
+
             console.log(`Updated Entry Flags ${entry.name}: `, entry);
             this.emit("entryFlagsUpdated", {
                 source: NTEventUpdateSource.REMOTE,
@@ -609,7 +609,7 @@ export default class V3NTClient extends NTClient {
 
             this._entries.delete(entry.id);
             this._entryNameToId.delete(entry.name);
-            
+
             console.log(`Deleted Entry: ${entry.name}`);
             this.emit("entryDeleted", {
                 source: NTEventUpdateSource.REMOTE,
