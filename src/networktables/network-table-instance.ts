@@ -1,260 +1,429 @@
-import NTParticipant from "../protocol/nt-participant";
 import { v4 as uuidv4 } from "uuid";
-import NetworkTable from "./network-table";
-import NetworkTableEntry, { EntryInfo } from "./network-table-entry";
-import V3NTServer from "../protocol/v3/v3-nt-server";
-import { NTConnectionState } from "../protocol/nt-types";
-import { NetworkEndpointInfo } from "../transport/transport-types";
+import NTParticipant from "../protocol/nt-participant";
+import NTEntry, { NTEntryType } from "../protocol/nt-entry";
 import V3NTClient from "../protocol/v3/v3-nt-client";
-import NTClient from "../protocol/nt-client";
+import { NTConnectionState, NTEntryEvent } from "../protocol/nt-types";
+import V3NTServer from "../protocol/v3/v3-nt-server";
+import NetworkTableEntry, { NTEntryFunctions } from "./network-table-entry";
+import NetworkTableValue from "./network-table-value2";
 
-export const NT_DEFAULT_PORT: number = 1735;
+const DEFAULT_NT_PORT = 1735;
 
-const NT_DEFAULT_INSTANCE_IDENT: string = "NT_DEFAULT_INSTANCE";
+export enum OperatingMode {
+    CLIENT,
+    SERVER,
+    LOCAL,
+    UNCONFIGURED
+}
 
-export enum NetworkMode {
-    NONE = 0x00,
-    SERVER = 0x01,
-    CLIENT = 0x02,
-    STARTING = 0x04,
-    FAILURE = 0x08,
-    LOCAL = 0x10
+export enum ConnectionState {
+    OFFLINE,
+    CONNECTING,
+    ONLINE
+}
+
+export interface RawNTEntryInfo {
+    entry: NTEntry;
+    lastUpdate: number;
+}
+
+export interface NetworkTableEntryInfo {
+    entry: NetworkTableEntry;
+    key: string;
+    isPending?: boolean;
+}
+
+export interface NetworkTableValueInfo {
+    value: NetworkTableValue,
+    key: string;
+    isPending: boolean;
 }
 
 export default class NetworkTableInstance {
-    // STATIC PROPERTIES AND METHODS
-    private static _instances: Map<string, NetworkTableInstance> = new Map<string, NetworkTableInstance>();
 
-    public static getDefault(): NetworkTableInstance {
-        if (!this._instances.has(NT_DEFAULT_INSTANCE_IDENT)) {
-            this._instances.set(NT_DEFAULT_INSTANCE_IDENT, new NetworkTableInstance(NT_DEFAULT_INSTANCE_IDENT));
+
+    // INSTANCE METHODS AND PROPERTIES
+
+    // Stores all the registered raw NTEntry objects
+    // These represent actual, live data
+    private _ntEntries: Map<string, RawNTEntryInfo> = new Map<string, RawNTEntryInfo>();
+
+    // Keyed from NT key to object
+    private _ntValues: Map<string, NetworkTableValueInfo> = new Map<string, NetworkTableValueInfo>();
+
+
+    // Map from NTEntry key => guid
+    private _entryGuidMap: Map<string, string> = new Map<string, string>();
+    private _pendingEntryGuids: Map<string, string> = new Map<string, string>();
+
+    // Cache of NetworkTableEntry-s
+    private _entries: Map<string, NetworkTableEntryInfo> = new Map<string, NetworkTableEntryInfo>();
+
+    private _ntParticipant: NTParticipant | null = null;
+    private _netIdentity: string = "NetworkTable";
+
+    private _opMode: OperatingMode = OperatingMode.UNCONFIGURED;
+    private _connState: ConnectionState = ConnectionState.OFFLINE;
+
+
+    private _entryFuncs: NTEntryFunctions;
+
+    constructor() {
+        // Set up the NTEntryFunctions
+
+        this._entryFuncs = {
+            getLastChange: this._entryGetLastChange.bind(this),
+            getBoolean: this._entryGetBoolean.bind(this),
+            getBooleanArray: this._entryGetBooleanArray.bind(this),
+            getString: this._entryGetString.bind(this),
+            getStringArray: this._entryGetStringArray.bind(this),
+            getDouble: this._entryGetDouble.bind(this),
+            getDoubleArray: this._entryGetDoubleArray.bind(this),
+            getRaw: this._entryGetRaw.bind(this),
+            setBoolean: this._entrySetBoolean.bind(this),
+            setBooleanArray: this._entrySetBooleanArray.bind(this),
+            setDouble: this._entrySetDouble.bind(this),
+            setDoubleArray: this._entrySetDoubleArray.bind(this),
+            setString: this._entrySetString.bind(this),
+            setStringArray: this._entrySetStringArray.bind(this),
+            setRaw: this._entrySetRaw.bind(this)
         }
-
-        return this._instances.get(NT_DEFAULT_INSTANCE_IDENT);
     }
 
-    public static create(): NetworkTableInstance {
-        const guid = uuidv4();
-        const instance = new NetworkTableInstance(guid);
+    public setNetworkIdentity(ident: string) {
+        this._netIdentity = ident;
 
-        this._instances.set(guid, instance);
-        return instance;
-    }
-
-    // INSTANCE PROPERTIES AND METHODS
-    private _guid: string;
-
-    private _netMode: NetworkMode = NetworkMode.NONE;
-    private _ntParticipant: NTParticipant;
-    private _tables: Map<string, NetworkTable> = new Map<string, NetworkTable>();
-
-    private _identifier: string;
-
-    // Used for client only
-    private _serverAddress: NetworkEndpointInfo;
-
-    private constructor(guid: string) {
-        this._guid = guid;
-    }
-
-    public get guid(): string {
-        return this._guid;
+        if (this._ntParticipant) {
+            this._ntParticipant.identifier = this._netIdentity;
+        }
     }
 
     public getEntry(key: string): NetworkTableEntry {
-        throw new Error("Method not implemented");
-    }
+        if (this._entryGuidMap.has(key)) {
+            console.log("Found a previously cached entry for ", key);
+            // We have a previously cached NetworkTableEntry
+            const entryGuid = this._entryGuidMap.get(key);
+            return this._entries.get(entryGuid).entry;
+        }
+        else if (this._pendingEntryGuids.has(key)) {
+            console.log("Found a previously cached entry (pending) for ", key);
+            // We have a previously cached PENDING NetworkTableEntry
+            const entryGuid = this._pendingEntryGuids.get(key);
+            return this._entries.get(entryGuid).entry;
+        }
+        else {
+            console.log("Creating pending entry for ", key);
+            // Create the entry accessor anyway
+            const entryGuid = uuidv4();
+            const newEntry = new NetworkTableEntry(this, key, entryGuid, this._entryFuncs);
 
-    public getEntries(prefix: string): NetworkTableEntry[] {
-        throw new Error("Method not implemented");
-    }
+            this._entries.set(entryGuid, {
+                entry: newEntry,
+                key,
+                isPending: true
+            });
 
-    public getEntryInfo(prefix: string): EntryInfo {
-        throw new Error("Method not implemented");
-    }
+            if (this._ntEntries.has(key)) {
+                // If this is a live record, add the map from key to guid
+                this._entryGuidMap.set(key, entryGuid);
+                const entryInfo = this._entries.get(key);
+                entryInfo.isPending = false;
+            }
+            else {
+                // Not a live record yet, add to pending
+                this._pendingEntryGuids.set(key, entryGuid);
+            }
 
-    public getTable(key: String): NetworkTable {
-        throw new Error("Method not implemented");
-    }
-
-    public deleteAllEntries(): void {
-        throw new Error("Method not implemented");
-    }
-
-    // TODO Entry Listeners
-
-    public setNetworkIdentity(ident: string) {
-        this._identifier = ident;
-
-        if (this._ntParticipant) {
-            this._ntParticipant.identifier = ident;
+            return newEntry;
         }
     }
 
-    public getNetworkMode(): NetworkMode {
-        return this._netMode;
-    }
+    // Start this instance as a client
+    public startClient(hostAddr: string, port: number = DEFAULT_NT_PORT) {
 
-    public startLocal() {
-        throw new Error("Method not implemented");
-    }
-
-    public stopLocal() {
-        throw new Error("Method not implemented");
-    }
-
-    public startServer(persistFile?: string, listenAddress?: string, listenPort?: number) {
-        if (this._netMode !== NetworkMode.NONE) {
-            // We're already in some other mode, bail out
+        if (this._opMode !== OperatingMode.UNCONFIGURED && this._connState !== ConnectionState.OFFLINE) {
+            console.log("Bailing early");
             return;
         }
 
-        if (!persistFile) {
-            persistFile = "networktables.ini";
-        }
-
-        if (!listenAddress) {
-            listenAddress = "";
-        }
-
-        if (!listenPort) {
-            listenPort = NT_DEFAULT_PORT;
-        }
-
-        this._ntParticipant = new V3NTServer({
-            port: listenPort,
-            identifier: this._identifier
-        });
-
-        this._netMode = NetworkMode.SERVER | NetworkMode.STARTING;
-
-        this._ntParticipant.on("connectionStateChanged", (oldState, newState) => {
-            if (newState === NTConnectionState.NTCONN_CONNECTED) {
-                this._netMode = NetworkMode.SERVER;
+        if (this._opMode !== OperatingMode.CLIENT || !this._ntParticipant) {
+            if (this._ntParticipant) {
+                this._ntParticipant.removeAllListeners();
             }
-        });
 
+            console.log("Creating new client");
+            this._ntParticipant = new V3NTClient({
+                address: hostAddr,
+                port,
+                identifier: this._netIdentity
+            });
+
+            this._hookupNTEvents();
+        }
+
+        this._opMode = OperatingMode.CLIENT;
+        this._ntParticipant.start();
+    }
+
+    public stopClient() {
+        if (this._opMode !== OperatingMode.CLIENT || this._connState === ConnectionState.OFFLINE) {
+            return;
+        }
+
+        this._ntParticipant.stop();
+
+        this._connState = ConnectionState.OFFLINE;
+    }
+
+    public startServer(persistFile: string, port: number = DEFAULT_NT_PORT) {
+        if (this._opMode !== OperatingMode.UNCONFIGURED && this._connState !== ConnectionState.OFFLINE) {
+            return;
+        }
+
+        if (this._opMode !== OperatingMode.SERVER || !this._ntParticipant) {
+            if (this._ntParticipant) {
+                this._ntParticipant.removeAllListeners();
+            }
+
+            this._ntParticipant = new V3NTServer({
+                port,
+                identifier: this._netIdentity
+            });
+
+            this._hookupNTEvents();
+        }
+
+        this._opMode = OperatingMode.SERVER;
         this._ntParticipant.start();
     }
 
     public stopServer() {
-        if ((this._netMode & NetworkMode.SERVER) !== NetworkMode.SERVER) {
-            this._ntParticipant.stop();
-            this._ntParticipant.removeAllListeners();
-            this._ntParticipant = undefined;
-
-            this._netMode = NetworkMode.NONE;
-        }
-        else {
-            throw new Error("Not in server mode");
-        }
-    }
-
-    public startClient(serverAddress?: string, port?: number) {
-        if (this._netMode !== NetworkMode.NONE) {
+        if (this._opMode !== OperatingMode.SERVER || this._connState === ConnectionState.OFFLINE) {
             return;
         }
 
-        if (!serverAddress) {
-            if (this._serverAddress) {
-                serverAddress = this._serverAddress.address;
-            }
-            else {
-                serverAddress = "localhost";
-            }
+        this._ntParticipant.stop();
+
+        this._connState = ConnectionState.OFFLINE;
+    }
+
+    private _hookupNTEvents() {
+        if (!this._ntParticipant) {
+            return;
         }
-
-        if (port === undefined) {
-            if (this._serverAddress) {
-                port = this._serverAddress.port;
-            }
-            else {
-                port = NT_DEFAULT_PORT;
-            }
-        }
-
-        this._serverAddress = {
-            address: serverAddress,
-            port
-        };
-
-        this._ntParticipant = new V3NTClient({
-            identifier: this._identifier,
-            address: serverAddress,
-            port
-        });
-
-        this._netMode = NetworkMode.CLIENT | NetworkMode.STARTING;
 
         this._ntParticipant.on("connectionStateChanged", (oldState, newState) => {
             if (newState === NTConnectionState.NTCONN_CONNECTED) {
-                this._netMode = NetworkMode.CLIENT;
+                this._connState = ConnectionState.ONLINE;
+            }
+            else if (newState === NTConnectionState.NTCONN_CONNECTING) {
+                this._connState = ConnectionState.CONNECTING;
+            }
+            else {
+                this._connState = ConnectionState.OFFLINE;
             }
         });
 
-        this._ntParticipant.start();
+        this._ntParticipant.on("entryAdded", (evt) => {
+            this._onEntryAdded(evt);
+        });
+
+        this._ntParticipant.on("entryUpdated", (evt) => {
+            this._onEntryUpdated(evt);
+        });
+
+        this._ntParticipant.on("entryDeleted", (evt) => {
+            this._onEntryDeleted(evt);
+        });
+
+        this._ntParticipant.on("entryFlagsUpdated", (evt) => {
+            this._onEntryFlagsUpdated(evt);
+        });
     }
 
-    public startClientTeam(teamNumber: number) {
-        const lower = (teamNumber % 100);
-        const upper = (teamNumber - lower) / 100;
+    private _onEntryAdded(evt: NTEntryEvent) {
+        console.log("ENTRY ADDED EVENT", evt);
+        const key = evt.entry.name;
 
-        const ipAddr = `10.${upper}.${lower}.2`;
-
-        this.startClient(ipAddr);
-    }
-
-    public stopClient() {
-        if ((this._netMode & NetworkMode.CLIENT) !== NetworkMode.CLIENT) {
-            this._ntParticipant.stop();
-            this._ntParticipant.removeAllListeners();
-            this._ntParticipant = undefined;
-
-            this._netMode = NetworkMode.NONE;
-        }
-        else {
-            throw new Error("Not in client mode");
-        }
-    }
-
-    public setServer(serverAddress: string, port?: number) {
-        if (port === undefined) {
-            port = NT_DEFAULT_PORT;
+        // Add this to our collection
+        if (this._ntEntries.has(key)) {
+            // TODO what happens now?
         }
 
-        this._serverAddress = {
-            address: serverAddress,
-            port
-        };
+        this._ntEntries.set(key, {
+            entry: {...evt.entry},
+            lastUpdate: Date.now()
+        });
 
-        if ((this._netMode & NetworkMode.CLIENT) === NetworkMode.CLIENT) {
-            (this._ntParticipant as NTClient).setServerEndpoint(this._serverAddress);
+
+        if (this._pendingEntryGuids.has(key)) {
+            if (this._entryGuidMap.has(key)) {
+                // ERROR!
+                console.log("Error?? Already have an entry guid for this");
+            }
+            else {
+                console.log("PROMOTING pending entry to full entry");
+                this._entryGuidMap.set(key, this._pendingEntryGuids.get(key));
+                this._pendingEntryGuids.delete(key);
+            }
         }
     }
 
-    public setServerTeam(teamNumber: number) {
-        const lower = (teamNumber % 100);
-        const upper = (teamNumber - lower) / 100;
-
-        const ipAddr = `10.${upper}.${lower}.2`;
-        this.setServer(ipAddr);
+    private _onEntryUpdated(evt: NTEntryEvent) {
+        if (this._ntEntries.has(evt.entry.name)) {
+            this._ntEntries.set(evt.entry.name, {
+                entry: {...evt.entry},
+                lastUpdate: Date.now()
+            });
+        }
     }
 
-    public startDSClient() {
-        // TODO Implement
-        // We should be able to start this at any time, but only
-        // send messages if we are in client state
+    private _onEntryFlagsUpdated(evt: NTEntryEvent) {
+        if (this._ntEntries.has(evt.entry.name)) {
+            const entryInfo = this._ntEntries.get(evt.entry.name);
+            entryInfo.entry.flags = {...evt.entry.flags};
+            entryInfo.lastUpdate = Date.now();
+        }
     }
 
-    public stopDSClient() {
-        // TODO Implement
+    private _onEntryDeleted(evt: NTEntryEvent) {
+        this._ntEntries.delete(evt.entry.name);
+
+        // Broadcast
     }
 
-    public setUpdateRate(updateIntervalSeconds: number) {
-        throw new Error("Method not implemented");
+    // NetworkTableEntry methods
+    private _entryGetLastChange(key: string): number {
+        if (this._ntEntries.has(key)) {
+            const ntEntryInfo = this._ntEntries.get(key);
+            return ntEntryInfo.lastUpdate;
+        }
+        return 0;
     }
 
-    public flush() {
-        throw new Error("Method not implemented");
+    private _entryGetBoolean(key: string, defaultVal: boolean): boolean {
+        if (this._ntEntries.has(key)) {
+            const entryInfo = this._ntEntries.get(key);
+
+            if (entryInfo.entry.type === NTEntryType.BOOLEAN) {
+                return entryInfo.entry.value.bool;
+            }
+        }
+        return defaultVal;
+    }
+
+    private _entryGetString(key: string, defaultVal: string): string {
+        if (this._ntEntries.has(key)) {
+            const entryInfo = this._ntEntries.get(key);
+
+            if (entryInfo.entry.type === NTEntryType.STRING) {
+                return entryInfo.entry.value.str;
+            }
+        }
+        return defaultVal;
+    }
+
+    private _entryGetDouble(key: string, defaultVal: number): number {
+        if (this._ntEntries.has(key)) {
+            const entryInfo = this._ntEntries.get(key);
+
+            if (entryInfo.entry.type === NTEntryType.DOUBLE) {
+                return entryInfo.entry.value.double;
+            }
+        }
+        return defaultVal;
+    }
+
+    private _entryGetBooleanArray(key: string, defaultVal: boolean[]): boolean[] {
+        if (this._ntEntries.has(key)) {
+            const entryInfo = this._ntEntries.get(key);
+
+            if (entryInfo.entry.type === NTEntryType.BOOLEAN_ARRAY) {
+                return entryInfo.entry.value.bool_array;
+            }
+        }
+        return defaultVal;
+    }
+
+    private _entryGetStringArray(key: string, defaultVal: string[]): string[] {
+        if (this._ntEntries.has(key)) {
+            const entryInfo = this._ntEntries.get(key);
+
+            if (entryInfo.entry.type === NTEntryType.STRING_ARRAY) {
+                return entryInfo.entry.value.str_array;
+            }
+        }
+        return defaultVal;
+    }
+
+    private _entryGetDoubleArray(key: string, defaultVal: number[]): number[] {
+        if (this._ntEntries.has(key)) {
+            const entryInfo = this._ntEntries.get(key);
+
+            if (entryInfo.entry.type === NTEntryType.DOUBLE_ARRAY) {
+                return entryInfo.entry.value.double_array;
+            }
+        }
+        return defaultVal;
+    }
+
+    private _entryGetRaw(key: string, defaultVal: Buffer): Buffer {
+        if (this._ntEntries.has(key)) {
+            const entryInfo = this._ntEntries.get(key);
+
+            if (entryInfo.entry.type === NTEntryType.RAW) {
+                return entryInfo.entry.value.raw;
+            }
+        }
+        return defaultVal;
+    }
+
+    private _entrySetBoolean(key: string, val: boolean): boolean {
+        if (!this._ntParticipant) {
+            return false;
+        }
+        return this._ntParticipant.setBoolean(key, val);
+    }
+
+    private _entrySetString(key: string, val: string): boolean {
+        if (!this._ntParticipant) {
+            return false;
+        }
+        return this._ntParticipant.setString(key, val);
+    }
+
+    private _entrySetDouble(key: string, val: number): boolean {
+        if (!this._ntParticipant) {
+            return false;
+        }
+        return this._ntParticipant.setDouble(key, val);
+    }
+
+    private _entrySetBooleanArray(key: string, val: boolean[]): boolean {
+        if (!this._ntParticipant) {
+            return false;
+        }
+        return this._ntParticipant.setBooleanArray(key, val);
+    }
+
+    private _entrySetStringArray(key: string, val: string[]): boolean {
+        if (!this._ntParticipant) {
+            return false;
+        }
+        return this._ntParticipant.setStringArray(key, val);
+    }
+
+    private _entrySetDoubleArray(key: string, val: number[]): boolean {
+        if (!this._ntParticipant) {
+            return false;
+        }
+        return this._ntParticipant.setDoubleArray(key, val);
+    }
+
+    private _entrySetRaw(key: string, val: Buffer): boolean {
+        if (!this._ntParticipant) {
+            return false;
+        }
+        return this._ntParticipant.setRaw(key, val);
     }
 }
