@@ -109,7 +109,6 @@ export enum V3ServerHandshakeState {
 }
 
 export interface V3EntryFlags extends NTEntryFlags {
-    persistent: boolean;
 }
 
 export const V3_DEFAULT_FLAGS: V3EntryFlags = {

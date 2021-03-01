@@ -1,13 +1,14 @@
 import { v4 as uuidv4 } from "uuid";
 import NTParticipant from "../protocol/nt-participant";
-import NTEntry, { NTEntryType } from "../protocol/nt-entry";
+import NTEntry, { NTEntryFlags, NTEntryType, NTEntryValue } from "../protocol/nt-entry";
 import V3NTClient from "../protocol/v3/v3-nt-client";
 import { NTConnectionState, NTEntryEvent } from "../protocol/nt-types";
 import V3NTServer from "../protocol/v3/v3-nt-server";
-import NetworkTableEntry, { NTEntryFunctions } from "./network-table-entry";
-import NetworkTableValue from "./network-table-value2";
+import NetworkTableEntry, { NetworkTableEntryFlags, NTEntryFunctions } from "./network-table-entry";
+import NetworkTable from "./network-table";
 
 const DEFAULT_NT_PORT = 1735;
+export const NT_PATH_SEPARATOR = "/";
 
 export enum OperatingMode {
     CLIENT,
@@ -33,24 +34,72 @@ export interface NetworkTableEntryInfo {
     isPending?: boolean;
 }
 
-export interface NetworkTableValueInfo {
-    value: NetworkTableValue,
-    key: string;
-    isPending: boolean;
+export enum NetworkTableType {
+    UNASSIGNED = 0x00,
+    BOOLEAN = 0x01,
+    DOUBLE = 0x02,
+    STRING = 0x04,
+    RAW = 0x08,
+    BOOLEAN_ARRAY = 0x10,
+    DOUBLE_ARRAY = 0x20,
+    STRING_ARRAY = 0x40,
+    RPC = 0x80
+};
+
+function toNTEntryType(type: NetworkTableType): NTEntryType {
+    switch (type) {
+        case NetworkTableType.BOOLEAN:
+            return NTEntryType.BOOLEAN;
+        case NetworkTableType.BOOLEAN_ARRAY:
+            return NTEntryType.BOOLEAN_ARRAY;
+        case NetworkTableType.DOUBLE:
+            return NTEntryType.DOUBLE;
+        case NetworkTableType.DOUBLE_ARRAY:
+            return NTEntryType.DOUBLE_ARRAY;
+        case NetworkTableType.STRING:
+            return NTEntryType.STRING;
+        case NetworkTableType.STRING_ARRAY:
+            return NTEntryType.STRING_ARRAY;
+        case NetworkTableType.RAW:
+            return NTEntryType.RAW;
+        case NetworkTableType.RPC:
+            return NTEntryType.RPC;
+        default:
+            throw new Error("Invalid conversion");
+    }
 }
 
+const DEFAULT_INSTANCE_IDENTIFIER = "NTCORE_DEFAULT_INSTANCE";
+
 export default class NetworkTableInstance {
+    // STATIC METHODS AND PROPERTIES
+    private static s_instances: Map<string, NetworkTableInstance> = new Map<string, NetworkTableInstance>();
+
+    public static getDefault(): NetworkTableInstance {
+        if (!this.s_instances.has(DEFAULT_INSTANCE_IDENTIFIER)) {
+            this.s_instances.set(DEFAULT_INSTANCE_IDENTIFIER, new NetworkTableInstance(DEFAULT_INSTANCE_IDENTIFIER));
+        }
+
+        return this.s_instances.get(DEFAULT_INSTANCE_IDENTIFIER);
+    }
+
+    public static create(): NetworkTableInstance {
+        const guid = uuidv4();
+        const inst = new NetworkTableInstance(guid);
+
+        this.s_instances.set(guid, inst);
+
+        return inst;
+    }
 
 
     // INSTANCE METHODS AND PROPERTIES
+    private _guid: string;
 
     // Stores all the registered raw NTEntry objects
     // These represent actual, live data
     private _ntEntries: Map<string, RawNTEntryInfo> = new Map<string, RawNTEntryInfo>();
-
-    // Keyed from NT key to object
-    private _ntValues: Map<string, NetworkTableValueInfo> = new Map<string, NetworkTableValueInfo>();
-
+    private _pendingNtEntries: Map<string, RawNTEntryInfo> = new Map<string, RawNTEntryInfo>();
 
     // Map from NTEntry key => guid
     private _entryGuidMap: Map<string, string> = new Map<string, string>();
@@ -58,6 +107,9 @@ export default class NetworkTableInstance {
 
     // Cache of NetworkTableEntry-s
     private _entries: Map<string, NetworkTableEntryInfo> = new Map<string, NetworkTableEntryInfo>();
+
+    // Cache of NetworkTable-s
+    private _tables: Map<string, NetworkTable> = new Map<string, NetworkTable>();
 
     private _ntParticipant: NTParticipant | null = null;
     private _netIdentity: string = "NetworkTable";
@@ -68,7 +120,8 @@ export default class NetworkTableInstance {
 
     private _entryFuncs: NTEntryFunctions;
 
-    constructor() {
+    protected constructor(guid: string) {
+        this._guid = guid;
         // Set up the NTEntryFunctions
 
         this._entryFuncs = {
@@ -86,8 +139,16 @@ export default class NetworkTableInstance {
             setDoubleArray: this._entrySetDoubleArray.bind(this),
             setString: this._entrySetString.bind(this),
             setStringArray: this._entrySetStringArray.bind(this),
-            setRaw: this._entrySetRaw.bind(this)
+            setRaw: this._entrySetRaw.bind(this),
+            delete: this._entryDelete.bind(this),
+            exists: this._entryExists.bind(this),
+            getFlags: this._entryGetFlags.bind(this),
+            setFlags: this._entrySetFlags.bind(this)
         }
+    }
+
+    public get guid(): string {
+        return this._guid;
     }
 
     public setNetworkIdentity(ident: string) {
@@ -136,6 +197,32 @@ export default class NetworkTableInstance {
 
             return newEntry;
         }
+    }
+
+    public getEntries(prefix: string, type: NetworkTableType): NetworkTableEntry[] {
+        throw new Error("Not Implmented Yet");
+    }
+
+    public getTable(key: string): NetworkTable {
+        let theKey: string = "";
+
+        if (key === "" || key === NT_PATH_SEPARATOR) {
+            theKey = "";
+        }
+        else if (key.charAt(0) === NT_PATH_SEPARATOR) {
+            theKey = key;
+        }
+        else {
+            theKey = NT_PATH_SEPARATOR + key;
+        }
+
+        let table: NetworkTable = this._tables.get(theKey);
+        if (!table) {
+            table = new NetworkTable(this, theKey);
+            this._tables.set(theKey, table);
+        }
+
+        return table;
     }
 
     // Start this instance as a client
@@ -215,6 +302,35 @@ export default class NetworkTableInstance {
         this._ntParticipant.on("connectionStateChanged", (oldState, newState) => {
             if (newState === NTConnectionState.NTCONN_CONNECTED) {
                 this._connState = ConnectionState.ONLINE;
+
+                // Flush any pending entries
+                this._pendingNtEntries.forEach((value, key) => {
+                    switch (value.entry.type) {
+                        case NTEntryType.BOOLEAN: {
+                            this._ntParticipant.setBoolean(key, value.entry.value.bool);
+                        } break;
+                        case NTEntryType.BOOLEAN_ARRAY: {
+                            this._ntParticipant.setBooleanArray(key, value.entry.value.bool_array);
+                        } break;
+                        case NTEntryType.DOUBLE: {
+                            this._ntParticipant.setDouble(key, value.entry.value.double);
+                        } break;
+                        case NTEntryType.DOUBLE_ARRAY: {
+                            this._ntParticipant.setDoubleArray(key, value.entry.value.double_array);
+                        } break;
+                        case NTEntryType.STRING: {
+                            this._ntParticipant.setString(key, value.entry.value.str);
+                        } break;
+                        case NTEntryType.STRING_ARRAY: {
+                            this._ntParticipant.setStringArray(key, value.entry.value.str_array);
+                        } break;
+                        case NTEntryType.RAW: {
+                            this._ntParticipant.setRaw(key, value.entry.value.raw);
+                        } break;
+                    }
+                });
+
+                this._pendingNtEntries.clear();
             }
             else if (newState === NTConnectionState.NTCONN_CONNECTING) {
                 this._connState = ConnectionState.CONNECTING;
@@ -294,17 +410,30 @@ export default class NetworkTableInstance {
 
     // NetworkTableEntry methods
     private _entryGetLastChange(key: string): number {
+        let entryInfo: RawNTEntryInfo;
         if (this._ntEntries.has(key)) {
-            const ntEntryInfo = this._ntEntries.get(key);
-            return ntEntryInfo.lastUpdate;
+            entryInfo = this._ntEntries.get(key);
+        }
+        else if (this._pendingNtEntries.has(key)) {
+            entryInfo = this._pendingNtEntries.get(key);
+        }
+
+        if (entryInfo) {
+            return entryInfo.lastUpdate;
         }
         return 0;
     }
 
     private _entryGetBoolean(key: string, defaultVal: boolean): boolean {
+        let entryInfo: RawNTEntryInfo;
         if (this._ntEntries.has(key)) {
-            const entryInfo = this._ntEntries.get(key);
+            entryInfo = this._ntEntries.get(key);
+        }
+        else if (this._pendingNtEntries.has(key)) {
+            entryInfo = this._pendingNtEntries.get(key);
+        }
 
+        if (entryInfo) {
             if (entryInfo.entry.type === NTEntryType.BOOLEAN) {
                 return entryInfo.entry.value.bool;
             }
@@ -313,9 +442,15 @@ export default class NetworkTableInstance {
     }
 
     private _entryGetString(key: string, defaultVal: string): string {
+        let entryInfo: RawNTEntryInfo;
         if (this._ntEntries.has(key)) {
-            const entryInfo = this._ntEntries.get(key);
+            entryInfo = this._ntEntries.get(key);
+        }
+        else if (this._pendingNtEntries.has(key)) {
+            entryInfo = this._pendingNtEntries.get(key);
+        }
 
+        if (entryInfo) {
             if (entryInfo.entry.type === NTEntryType.STRING) {
                 return entryInfo.entry.value.str;
             }
@@ -324,9 +459,15 @@ export default class NetworkTableInstance {
     }
 
     private _entryGetDouble(key: string, defaultVal: number): number {
+        let entryInfo: RawNTEntryInfo;
         if (this._ntEntries.has(key)) {
-            const entryInfo = this._ntEntries.get(key);
+            entryInfo = this._ntEntries.get(key);
+        }
+        else if (this._pendingNtEntries.has(key)) {
+            entryInfo = this._pendingNtEntries.get(key);
+        }
 
+        if (entryInfo) {
             if (entryInfo.entry.type === NTEntryType.DOUBLE) {
                 return entryInfo.entry.value.double;
             }
@@ -335,9 +476,15 @@ export default class NetworkTableInstance {
     }
 
     private _entryGetBooleanArray(key: string, defaultVal: boolean[]): boolean[] {
+        let entryInfo: RawNTEntryInfo;
         if (this._ntEntries.has(key)) {
-            const entryInfo = this._ntEntries.get(key);
+            entryInfo = this._ntEntries.get(key);
+        }
+        else if (this._pendingNtEntries.has(key)) {
+            entryInfo = this._pendingNtEntries.get(key);
+        }
 
+        if (entryInfo) {
             if (entryInfo.entry.type === NTEntryType.BOOLEAN_ARRAY) {
                 return entryInfo.entry.value.bool_array;
             }
@@ -346,9 +493,15 @@ export default class NetworkTableInstance {
     }
 
     private _entryGetStringArray(key: string, defaultVal: string[]): string[] {
+        let entryInfo: RawNTEntryInfo;
         if (this._ntEntries.has(key)) {
-            const entryInfo = this._ntEntries.get(key);
+            entryInfo = this._ntEntries.get(key);
+        }
+        else if (this._pendingNtEntries.has(key)) {
+            entryInfo = this._pendingNtEntries.get(key);
+        }
 
+        if (entryInfo) {
             if (entryInfo.entry.type === NTEntryType.STRING_ARRAY) {
                 return entryInfo.entry.value.str_array;
             }
@@ -357,9 +510,15 @@ export default class NetworkTableInstance {
     }
 
     private _entryGetDoubleArray(key: string, defaultVal: number[]): number[] {
+        let entryInfo: RawNTEntryInfo;
         if (this._ntEntries.has(key)) {
-            const entryInfo = this._ntEntries.get(key);
+            entryInfo = this._ntEntries.get(key);
+        }
+        else if (this._pendingNtEntries.has(key)) {
+            entryInfo = this._pendingNtEntries.get(key);
+        }
 
+        if (entryInfo) {
             if (entryInfo.entry.type === NTEntryType.DOUBLE_ARRAY) {
                 return entryInfo.entry.value.double_array;
             }
@@ -368,9 +527,15 @@ export default class NetworkTableInstance {
     }
 
     private _entryGetRaw(key: string, defaultVal: Buffer): Buffer {
+        let entryInfo: RawNTEntryInfo;
         if (this._ntEntries.has(key)) {
-            const entryInfo = this._ntEntries.get(key);
+            entryInfo = this._ntEntries.get(key);
+        }
+        else if (this._pendingNtEntries.has(key)) {
+            entryInfo = this._pendingNtEntries.get(key);
+        }
 
+        if (entryInfo) {
             if (entryInfo.entry.type === NTEntryType.RAW) {
                 return entryInfo.entry.value.raw;
             }
@@ -380,50 +545,155 @@ export default class NetworkTableInstance {
 
     private _entrySetBoolean(key: string, val: boolean): boolean {
         if (!this._ntParticipant) {
-            return false;
+            return this._insertPendingEntry(key, NTEntryType.BOOLEAN, { bool: val });
         }
         return this._ntParticipant.setBoolean(key, val);
     }
 
     private _entrySetString(key: string, val: string): boolean {
         if (!this._ntParticipant) {
-            return false;
+            return this._insertPendingEntry(key, NTEntryType.STRING, { str: val });
         }
         return this._ntParticipant.setString(key, val);
     }
 
     private _entrySetDouble(key: string, val: number): boolean {
         if (!this._ntParticipant) {
-            return false;
+            return this._insertPendingEntry(key, NTEntryType.DOUBLE, { double: val });
         }
         return this._ntParticipant.setDouble(key, val);
     }
 
     private _entrySetBooleanArray(key: string, val: boolean[]): boolean {
         if (!this._ntParticipant) {
-            return false;
+            return this._insertPendingEntry(key, NTEntryType.BOOLEAN_ARRAY, { bool_array: val });
         }
         return this._ntParticipant.setBooleanArray(key, val);
     }
 
     private _entrySetStringArray(key: string, val: string[]): boolean {
         if (!this._ntParticipant) {
-            return false;
+            return this._insertPendingEntry(key, NTEntryType.STRING_ARRAY, { str_array: val });
         }
         return this._ntParticipant.setStringArray(key, val);
     }
 
     private _entrySetDoubleArray(key: string, val: number[]): boolean {
         if (!this._ntParticipant) {
-            return false;
+            return this._insertPendingEntry(key, NTEntryType.DOUBLE_ARRAY, { double_array: val });
         }
         return this._ntParticipant.setDoubleArray(key, val);
     }
 
     private _entrySetRaw(key: string, val: Buffer): boolean {
         if (!this._ntParticipant) {
-            return false;
+            return this._insertPendingEntry(key, NTEntryType.RAW, { raw: val });
         }
         return this._ntParticipant.setRaw(key, val);
+    }
+
+    private _entryDelete(key: string): boolean {
+        if (!this._ntParticipant) {
+            if (this._pendingNtEntries.has(key)) {
+                this._pendingNtEntries.delete(key);
+                return true;
+            }
+
+            return false;
+        }
+
+        return this._ntParticipant.deleteEntry(key);
+    }
+
+    private _entryExists(key: string): boolean {
+        return this._ntEntries.has(key);
+    }
+
+    private _entryGetFlags(key: string): NetworkTableEntryFlags {
+        if (!this._ntEntries.has(key)) {
+            return NetworkTableEntryFlags.UNASSIGNED;
+        }
+
+        let result = NetworkTableEntryFlags.UNASSIGNED;
+
+        const entryInfo = this._ntEntries.get(key);
+
+        if (entryInfo.entry.flags) {
+            const flags: NTEntryFlags = entryInfo.entry.flags;
+            if (flags.persistent) {
+                result |= NetworkTableEntryFlags.PERSISTENT;
+            }
+        }
+
+        return result;
+    }
+
+    private _entrySetFlags(key: string, flags: NetworkTableEntryFlags): void {
+        if (!this._ntParticipant) {
+            return;
+        }
+
+        if (!this._ntEntries.has(key)) {
+            return;
+        }
+
+        const entryFlags: NTEntryFlags = {
+            persistent: (flags & NetworkTableEntryFlags.PERSISTENT) !== 0
+        }
+        this._ntParticipant.updateEntryFlags(key, entryFlags);
+    }
+
+    private _insertPendingEntry(key: string, type: NTEntryType, value: NTEntryValue): boolean {
+        // Typecheck
+        if (!this._typecheckValue(type, value)) {
+            return false;
+        }
+
+        if (!this._pendingNtEntries.has(key)) {
+
+            this._pendingNtEntries.set(key, {
+                lastUpdate: Date.now(),
+                entry: {
+                    name: key,
+                    id: 0xFFFF,
+                    seq: 0,
+                    type,
+                    value
+                }
+            });
+
+            return true;
+        }
+        else {
+            // There's an existing pending option, check the types
+            const entryInfo = this._pendingNtEntries.get(key);
+            if (entryInfo.entry.type !== type) {
+                return false;
+            }
+
+            entryInfo.entry.value = value;
+            return true;
+        }
+    }
+
+    private _typecheckValue(type: NTEntryType, val: NTEntryValue): boolean {
+        switch (type) {
+            case NTEntryType.BOOLEAN:
+                return val.bool !== undefined;
+            case NTEntryType.BOOLEAN_ARRAY:
+                return val.bool_array !== undefined;
+            case NTEntryType.DOUBLE:
+                return val.double !== undefined;
+            case NTEntryType.DOUBLE_ARRAY:
+                return val.double_array !== undefined;
+            case NTEntryType.STRING:
+                return val.str !== undefined;
+            case NTEntryType.STRING_ARRAY:
+                return val.str_array !== undefined;
+            case NTEntryType.RAW:
+                return val.raw !== undefined;
+            case NTEntryType.RPC:
+                return val.rpc !== undefined;
+        }
     }
 }

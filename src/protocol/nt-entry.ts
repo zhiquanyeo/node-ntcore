@@ -22,7 +22,9 @@ export interface NTEntryValue {
     rpc?: any; // TODO proper spec?
 }
 
-export interface NTEntryFlags {}
+export interface NTEntryFlags {
+    persistent: boolean;
+}
 
 // Minimal set of fields that make up an NT Entry
 export default interface NTEntry {

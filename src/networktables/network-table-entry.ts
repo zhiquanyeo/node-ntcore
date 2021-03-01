@@ -1,5 +1,10 @@
 import NetworkTableInstance from "./network-table-instance";
 
+export enum NetworkTableEntryFlags {
+    UNASSIGNED = 0x00,
+    PERSISTENT = 0x01
+}
+
 export interface NTEntryFunctions {
     getLastChange(key: string): number;
 
@@ -18,6 +23,13 @@ export interface NTEntryFunctions {
     setStringArray(key: string, val: string[]): boolean;
     setDoubleArray(key: string, val: number[]): boolean;
     setRaw(key: string, val: Buffer): boolean;
+
+    delete(key: string): boolean;
+    exists(key: string): boolean;
+
+    getFlags(key: string): NetworkTableEntryFlags;
+    setFlags(key: string, flags: NetworkTableEntryFlags): void;
+
 }
 
 /**
@@ -102,5 +114,37 @@ export default class NetworkTableEntry {
 
     public setRaw(val: Buffer): boolean {
         return this._funcs.setRaw(this._key, val);
+    }
+
+    public exists(): boolean {
+        return this._funcs.exists(this._key);
+    }
+
+    public delete(): boolean {
+        return this._funcs.delete(this._key);
+    }
+
+    public getFlags(): NetworkTableEntryFlags {
+        return this._funcs.getFlags(this._key);
+    }
+
+    public setFlags(flags: NetworkTableEntryFlags): void {
+        this._funcs.setFlags(this._key, this.getFlags() | flags)
+    }
+
+    public clearFlags(flags: NetworkTableEntryFlags): void {
+        this._funcs.setFlags(this._key, this.getFlags() & ~flags);
+    }
+
+    public setPersistent(): void {
+        this.setFlags(NetworkTableEntryFlags.PERSISTENT);
+    }
+
+    public clearPersistent(): void {
+        this.clearFlags(NetworkTableEntryFlags.PERSISTENT);
+    }
+
+    public isPersistent(): boolean {
+        return (this.getFlags() & NetworkTableEntryFlags.PERSISTENT) !== 0;
     }
 }
