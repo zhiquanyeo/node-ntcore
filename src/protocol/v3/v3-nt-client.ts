@@ -143,7 +143,7 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
                     });
 
                     if (entriesToSend.length > 0) {
-                        this._logger.debug(`${entriesToSend.length} client side entries to send`);
+                        this._logger.info(`${entriesToSend.length} client side entries to send`);
 
                         entriesToSend.forEach(entry => {
                             this._writeFunc(entryAssignmentMessageToBuffer({
@@ -395,7 +395,7 @@ export default class V3NTClient extends NTClient {
     protected _handshake(): Promise<void> {
         return new Promise((resolve, reject) => {
             this._handshakeManager.beginHandshake(this._entries, this._pendingEntries);
-            this._handshakeManager.on("handshakeComplete", (data) => {
+            this._handshakeManager.once("handshakeComplete", (data) => {
                 this._logger.info("Handshake Complete");
                 // Update our client side with the new entries/updated
                 if (data) {
@@ -456,7 +456,7 @@ export default class V3NTClient extends NTClient {
                 }
                 resolve();
             });
-            this._handshakeManager.on("handshakeError", supportedVersion => {
+            this._handshakeManager.once("handshakeError", supportedVersion => {
                 reject(new NTProtocolVersionUnsupportedError(supportedVersion, `Server only supports version ${supportedVersion.major}.${supportedVersion.minor}`));
             });
         });

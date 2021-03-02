@@ -8,7 +8,7 @@ import NetworkTableEntry, { NetworkTableEntryFlags, NTEntryFunctions } from "./n
 import NetworkTable from "./network-table";
 import NTClient from "../protocol/nt-client";
 import NetworkTableValue from "./network-table-value";
-import Logger from "../utils/logger";
+import Logger, { LogSeverity } from "../utils/logger";
 
 const DEFAULT_NT_PORT = 1735;
 export const NT_PATH_SEPARATOR = "/";
@@ -204,6 +204,18 @@ export default class NetworkTableInstance {
         }
     }
 
+    public set logSeverity(val: LogSeverity) {
+        this._logger.severity = val;
+
+        if (this._ntParticipant) {
+            this._ntParticipant.logSeverity = val;
+        }
+    }
+
+    public get logSeverity(): LogSeverity {
+        return this._logger.severity;
+    }
+
     public get guid(): string {
         return this._guid;
     }
@@ -359,6 +371,9 @@ export default class NetworkTableInstance {
                 identifier: this._netIdentity
             });
 
+            // Also set up the logging severity
+            this._ntParticipant.logSeverity = this.logSeverity;
+
             this._hookupNTEvents();
         }
 
@@ -390,6 +405,9 @@ export default class NetworkTableInstance {
                 port,
                 identifier: this._netIdentity
             });
+
+            // Also set up the logging severity
+            this._ntParticipant.logSeverity = this.logSeverity;
 
             this._hookupNTEvents();
         }
