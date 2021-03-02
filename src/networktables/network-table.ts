@@ -1,9 +1,11 @@
 import NetworkTableEntry from "./network-table-entry";
-import NetworkTableInstance, { EntryListener, EntryListenerFlags, NetworkTableType, NT_PATH_SEPARATOR } from "./network-table-instance";
+import NetworkTableInstance, { EntryListenerFlags, NetworkTableType } from "./network-table-instance";
 import NetworkTableValue from "./network-table-value";
 
+const NT_PATH_SEPARATOR = "/";
 const normalizeRegex = new RegExp(`${NT_PATH_SEPARATOR}{2,}`, "g");
 
+export type TableEntryListener = (table: NetworkTable, key: string, entry: NetworkTableEntry, value: NetworkTableValue, flags: EntryListenerFlags) => void;
 export type TableCreationListener = (parent: NetworkTable, name: string, table: NetworkTable) => void;
 
 export default class NetworkTable {
@@ -111,22 +113,25 @@ export default class NetworkTable {
         return entry;
     }
 
-    public addEntryListener(key: string | null, listener: EntryListener, listenerFlags: EntryListenerFlags): string {
+    public addEntryListener(key: string | null, listener: TableEntryListener, listenerFlags: EntryListenerFlags): string {
         if (key !== null) {
             const entry = this.getEntry(key);
-            return this._instance.addEntryListener(entry, listener, listenerFlags);
+            return this._instance.addEntryListener(entry, 
+                (key, entry, value, flags) => {
+                    listener(this, key, entry, value, flags);
+                }, listenerFlags);
         }
-
+        
         const prefixLen = this._path.length + 1;
         return this._instance.addEntryListener(this._path, 
-            (table, key, entry, value, flags) => {
+            (key, entry, value, flags) => {
                 const relativeKey = key.substring(prefixLen);
                 if (relativeKey.indexOf(NT_PATH_SEPARATOR) !== -1) {
                     // Part of a sub table, ignore
                     return;
                 }
 
-                listener(table, relativeKey, entry, value, flags);
+                listener(this, relativeKey, entry, value, flags);
             },
             listenerFlags);
     }
@@ -142,13 +147,15 @@ export default class NetworkTable {
             flags |= EntryListenerFlags.LOCAL;
         }
 
+        console.log("Path: ", this._path);
         const prefixLen = this._path.length + 1;
         const parent: NetworkTable = this;
 
         const notifiedTables = new Set<string>();
         return this._instance.addEntryListener(this._pathWithSep,
-            (table, key, entry, value, flags) => {
+            (key, entry, value, flags) => {
                 const relativeKey = key.substring(prefixLen);
+                console.log("Relative Key: ", relativeKey);
                 const endSubTable = relativeKey.indexOf(NT_PATH_SEPARATOR);
                 if (endSubTable === -1) {
                     return;
@@ -174,13 +181,12 @@ export default class NetworkTable {
     }
 
     public containsKey(key: string): boolean {
-        throw new Error("Method not implemented");
-        // TODO we need to modify NetworkTableEntry to let us know if it is "real"
+        return this.getEntry(key).exists();
     }
 
     public containsSubTable(key: string): boolean {
-        throw new Error("Method not implemented");
-        // TODO we need instance.getEntries() to be implemented
+        const entries = this._instance.getEntries(this._pathWithSep + key + NT_PATH_SEPARATOR, NetworkTableType.UNASSIGNED);
+        return entries.length !== 0;
     }
 
     public getKeys(types: NetworkTableType = NetworkTableType.UNASSIGNED): Set<string> {
@@ -225,8 +231,7 @@ export default class NetworkTable {
     }
 
     public delete(key: string): void {
-        throw new Error("Method not implemented");
-        // TODO this.getEntry(key).delete();
+        this.getEntry(key).delete();
     }
 
     public getPath(): string {
@@ -238,14 +243,6 @@ export default class NetworkTable {
     }
 
     public loadEntries(filename: string): string[] {
-        throw new Error("Method not implemented");
-    }
-
-    public equals(other: NetworkTable): boolean {
-        if (other === this) {
-            return true;
-        }
-
         throw new Error("Method not implemented");
     }
 }

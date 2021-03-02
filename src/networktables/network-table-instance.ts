@@ -12,6 +12,13 @@ import NetworkTableValue from "./network-table-value";
 const DEFAULT_NT_PORT = 1735;
 export const NT_PATH_SEPARATOR = "/";
 
+enum EntryEventType {
+    ADD = "ADD",
+    UPDATE = "UPDATE",
+    DELETE = "DELETE",
+    FLAGS = "FLAGS"
+}
+
 export enum EntryListenerFlags {
     IMMEDIATE = 0x01,
     LOCAL = 0x02,
@@ -21,7 +28,7 @@ export enum EntryListenerFlags {
     FLAGS = 0x20
 }
 
-export type EntryListener = (table: NetworkTable, key: string, entry: NetworkTableEntry, value: NetworkTableValue, flags: EntryListenerFlags) => void;
+export type EntryListener = (key: string, entry: NetworkTableEntry, value: NetworkTableValue, flags: EntryListenerFlags) => void;
 
 interface EntryListenerInfo {
     listener: EntryListener;
@@ -421,6 +428,8 @@ export default class NetworkTableInstance {
                 // Flush any pending entries
                 this._pendingNtEntries.forEach((value, key) => {
                     console.log("Flushing entry ", value.entry.name);
+                    // TODO This is exactly the same logic as the code in onEntryAdded
+                    // refactor into a helper function
                     switch (value.entry.type) {
                         case NTEntryType.BOOLEAN: {
                             this._ntParticipant.setBoolean(key, value.entry.value.bool);
@@ -530,6 +539,8 @@ export default class NetworkTableInstance {
                 }
             }
         }
+
+        this._informListeners(EntryEventType.ADD, evt);
     }
 
     private _onEntryUpdated(evt: NTEntryEvent) {
@@ -538,6 +549,8 @@ export default class NetworkTableInstance {
                 entry: {...evt.entry},
                 lastUpdate: Date.now()
             });
+
+            this._informListeners(EntryEventType.UPDATE, evt);
         }
     }
 
@@ -546,13 +559,81 @@ export default class NetworkTableInstance {
             const entryInfo = this._ntEntries.get(evt.entry.name);
             entryInfo.entry.flags = {...evt.entry.flags};
             entryInfo.lastUpdate = Date.now();
+
+            this._informListeners(EntryEventType.FLAGS, evt);
         }
     }
 
     private _onEntryDeleted(evt: NTEntryEvent) {
         this._ntEntries.delete(evt.entry.name);
 
-        // Broadcast
+        this._informListeners(EntryEventType.DELETE, evt);
+    }
+
+    private _informListeners(evtType: EntryEventType, evt: NTEntryEvent) {
+        this._entryListeners.forEach(listenerInfo => {
+            // Handle Flags first
+            const listenerFlags = listenerInfo.flags;
+
+            // Skip if the event is local and we didn't request it
+            if (evt.source === NTEventUpdateSource.LOCAL && ((listenerFlags & EntryListenerFlags.LOCAL) === 0)) {
+                return;
+            }
+
+            // Check the event type against the flags
+            if (evtType === EntryEventType.ADD && ((listenerFlags & EntryListenerFlags.NEW) === 0)) {
+                return;
+            }
+            else if (evtType === EntryEventType.UPDATE && ((listenerFlags & EntryListenerFlags.UPDATE) === 0)) {
+                return;
+            }
+            else if (evtType === EntryEventType.DELETE && ((listenerFlags & EntryListenerFlags.DELETE) === 0)) {
+                return;
+            }
+            else if (evtType === EntryEventType.FLAGS && ((listenerFlags & EntryListenerFlags.FLAGS) === 0)) {
+                return;
+            }
+
+            // Reject based on prefix or exact match
+            if (listenerInfo.isPrefixMatch) {
+                if (evt.entry.name.indexOf(listenerInfo.matchKey) !== 0) {
+                    return;
+                }
+            }
+            else {
+                if (evt.entry.name !== listenerInfo.matchKey) {
+                    return;
+                }
+            }
+
+            // Make the value
+            let entryVal: NetworkTableValue;
+            switch (evt.entry.type) {
+                case NTEntryType.BOOLEAN: {
+                    entryVal = NetworkTableValue.makeBoolean(evt.entry.value.bool);
+                } break;
+                case NTEntryType.BOOLEAN_ARRAY: {
+                    entryVal = NetworkTableValue.makeBooleanArray(evt.entry.value.bool_array);
+                } break;
+                case NTEntryType.DOUBLE: {
+                    entryVal = NetworkTableValue.makeDouble(evt.entry.value.double);
+                } break;
+                case NTEntryType.DOUBLE_ARRAY: {
+                    entryVal = NetworkTableValue.makeDoubleArray(evt.entry.value.double_array);
+                } break;
+                case NTEntryType.STRING: {
+                    entryVal = NetworkTableValue.makeString(evt.entry.value.str);
+                } break;
+                case NTEntryType.STRING_ARRAY: {
+                    entryVal = NetworkTableValue.makeStringArray(evt.entry.value.str_array);
+                } break;
+                case NTEntryType.RAW: {
+                    entryVal = NetworkTableValue.makeRaw(evt.entry.value.raw);
+                } break;
+            }
+
+            listenerInfo.listener(evt.entry.name, this.getEntry(evt.entry.name), entryVal, listenerInfo.flags);
+        });
     }
 
     // NetworkTableEntry methods
