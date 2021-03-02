@@ -1,11 +1,10 @@
-import StrictEventEmitter from "strict-event-emitter-types";
 import { EventEmitter } from "events";
 import { Socket } from "net";
-import { NTtoV3EntryType, V3EntryFlags, V3MessageType, V3MessageTypeToString, V3RPCDefinition, V3ServerHandshakeState, V3toNTEntryType, V3_DEFAULT_FLAGS } from "./v3-types";
-import { NTEntryNotFoundError, NTEntryTypeMismatchError, NTEventUpdateSource, NTProtocolVersion } from "../nt-types";
+import { NTtoV3EntryType, V3EntryFlags, V3MessageType, V3MessageTypeToString, V3RPCDefinition, V3toNTEntryType, V3_DEFAULT_FLAGS } from "./v3-types";
+import { NTEntryNotFoundError, NTEntryTypeMismatchError, NTEventUpdateSource, } from "../nt-types";
 import NTEntry, { NTEntryFlags, NTEntryType } from "../nt-entry";
 import NTServer, { NTServerOptions } from "../nt-server";
-import { clearAllEntriesMessageToBuffer, entryAssignmentMessageToBuffer, entryDeleteMessageToBuffer, entryFlagsUpdateMessageToBuffer, entryUpdateMessageToBuffer, getNextAvailableMessage, serverHelloCompleteMessageToBuffer, serverHelloMessageToBuffer, V3ClearAllEntriesMessage, V3EntryAssignmentMessage, V3EntryDeleteMessage, V3EntryFlagsUpdateMessage, V3EntryUpdateMessage, V3Message, V3MessageWrapper, V3RPCExecuteMessage } from "./v3-messages";
+import { clearAllEntriesMessageToBuffer, entryAssignmentMessageToBuffer, entryDeleteMessageToBuffer, entryFlagsUpdateMessageToBuffer, entryUpdateMessageToBuffer, getNextAvailableMessage, serverHelloCompleteMessageToBuffer, serverHelloMessageToBuffer, V3EntryAssignmentMessage, V3EntryDeleteMessage, V3EntryFlagsUpdateMessage, V3EntryUpdateMessage, V3Message, V3MessageWrapper, V3RPCExecuteMessage } from "./v3-messages";
 import { ntValueIsEqual } from "../protocol-utils";
 
 export interface V3ServerOptions extends NTServerOptions {
