@@ -1,4 +1,5 @@
-import NetworkTableInstance from "./network-table-instance";
+import NetworkTableInstance, { NetworkTableType } from "./network-table-instance";
+import NetworkTableValue from "./network-table-value";
 
 export enum NetworkTableEntryFlags {
     UNASSIGNED = 0x00,
@@ -7,6 +8,8 @@ export enum NetworkTableEntryFlags {
 
 export interface NTEntryFunctions {
     getLastChange(key: string): number;
+    getType(key: string): NetworkTableType;
+    getValue(key: string): NetworkTableValue;
 
     getBoolean(key: string, defaultVal: boolean): boolean;
     getString(key: string, defaultVal: string): string;
@@ -58,6 +61,14 @@ export default class NetworkTableEntry {
 
     public getLastChange(): number {
         return this._funcs.getLastChange(this._key);
+    }
+
+    public getType(): NetworkTableType {
+        return this._funcs.getType(this._key);
+    }
+
+    public getValue(): NetworkTableValue {
+        return this._funcs.getValue(this._key);
     }
 
     public getBoolean(defaultVal: boolean): boolean {

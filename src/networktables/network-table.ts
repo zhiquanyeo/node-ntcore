@@ -1,7 +1,10 @@
 import NetworkTableEntry from "./network-table-entry";
-import NetworkTableInstance, { NetworkTableType, NT_PATH_SEPARATOR } from "./network-table-instance";
+import NetworkTableInstance, { EntryListener, EntryListenerFlags, NetworkTableType, NT_PATH_SEPARATOR } from "./network-table-instance";
+import NetworkTableValue from "./network-table-value";
 
 const normalizeRegex = new RegExp(`${NT_PATH_SEPARATOR}{2,}`, "g");
+
+export type TableCreationListener = (parent: NetworkTable, name: string, table: NetworkTable) => void;
 
 export default class NetworkTable {
     // STATIC METHODS AND PROPERTIES
@@ -108,7 +111,63 @@ export default class NetworkTable {
         return entry;
     }
 
-    // TODO Entry and subtable listeners
+    public addEntryListener(key: string | null, listener: EntryListener, listenerFlags: EntryListenerFlags): string {
+        if (key !== null) {
+            const entry = this.getEntry(key);
+            return this._instance.addEntryListener(entry, listener, listenerFlags);
+        }
+
+        const prefixLen = this._path.length + 1;
+        return this._instance.addEntryListener(this._path, 
+            (table, key, entry, value, flags) => {
+                const relativeKey = key.substring(prefixLen);
+                if (relativeKey.indexOf(NT_PATH_SEPARATOR) !== -1) {
+                    // Part of a sub table, ignore
+                    return;
+                }
+
+                listener(table, relativeKey, entry, value, flags);
+            },
+            listenerFlags);
+    }
+
+    public removeEntryListener(guid: string) {
+        this._instance.removeEntryListener(guid);
+    }
+    
+    public addSubTableListener(listener: TableCreationListener, localNotify: boolean) {
+        let flags = EntryListenerFlags.NEW | EntryListenerFlags.IMMEDIATE;
+
+        if (localNotify) {
+            flags |= EntryListenerFlags.LOCAL;
+        }
+
+        const prefixLen = this._path.length + 1;
+        const parent: NetworkTable = this;
+
+        const notifiedTables = new Set<string>();
+        return this._instance.addEntryListener(this._pathWithSep,
+            (table, key, entry, value, flags) => {
+                const relativeKey = key.substring(prefixLen);
+                const endSubTable = relativeKey.indexOf(NT_PATH_SEPARATOR);
+                if (endSubTable === -1) {
+                    return;
+                }
+
+                const subTableKey = relativeKey.substring(0, endSubTable);
+                if (notifiedTables.has(subTableKey)) {
+                    return;
+                }
+                notifiedTables.add(subTableKey);
+
+                listener(parent, subTableKey, parent.getSubTable(subTableKey));
+
+            }, flags);
+    }
+
+    public removeSubTableListener(guid: string) {
+        this._instance.removeEntryListener(guid);
+    }
 
     public getSubTable(key: string): NetworkTable {
         return new NetworkTable(this._instance, this._pathWithSep + key);

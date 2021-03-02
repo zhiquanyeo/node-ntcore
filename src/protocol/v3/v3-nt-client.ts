@@ -63,7 +63,7 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
         }
 
         if (pendingEntries) {
-            clientEntries.forEach(entry => {
+            pendingEntries.forEach(entry => {
                 this._clientSideEntries.set(entry.name, {...entry});
             });
         }
@@ -149,7 +149,7 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
                                 entrySeq: entry.seq,
                                 entryType: NTtoV3EntryType.get(entry.type),
                                 entryValue: entry.value,
-                                entryFlags: entry.flags
+                                entryFlags: entry.flags || V3_DEFAULT_FLAGS
                             }));
                         });
                     }
