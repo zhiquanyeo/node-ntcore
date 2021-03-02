@@ -2,7 +2,7 @@
   "name": "node-ntcore",
   "version": "0.0.1",
   "description": "ntcore (Network Tables) for NodeJS",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build",

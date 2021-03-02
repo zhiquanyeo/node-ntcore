@@ -6,6 +6,7 @@ import { NTConnectionState, NTEntryEvent } from "../protocol/nt-types";
 import V3NTServer from "../protocol/v3/v3-nt-server";
 import NetworkTableEntry, { NetworkTableEntryFlags, NTEntryFunctions } from "./network-table-entry";
 import NetworkTable from "./network-table";
+import NTClient from "../protocol/nt-client";
 
 const DEFAULT_NT_PORT = 1735;
 export const NT_PATH_SEPARATOR = "/";
@@ -292,6 +293,18 @@ export default class NetworkTableInstance {
         this._ntParticipant.stop();
 
         this._connState = ConnectionState.OFFLINE;
+    }
+
+    public setServer(address: string, port: number = 1735) {
+        if (this._opMode === OperatingMode.CLIENT && this._ntParticipant) {
+            const client = this._ntParticipant as NTClient;
+            if (client.address !== address || client.port !== port) {
+                client.setServerEndpoint({
+                    address,
+                    port
+                });
+            }
+        }
     }
 
     private _hookupNTEvents() {
