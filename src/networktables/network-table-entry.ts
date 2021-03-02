@@ -1,4 +1,4 @@
-import NetworkTableInstance, { EntryListenerFlags, NetworkTableType } from "./network-table-instance";
+import NetworkTableInstance, { NetworkTableType } from "./network-table-instance";
 import NetworkTableValue from "./network-table-value";
 
 export enum NetworkTableEntryFlags {

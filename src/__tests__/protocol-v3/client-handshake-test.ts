@@ -1,6 +1,7 @@
 import { V3ClientHandshakeState, V3EntryType, V3MessageType } from "../../protocol/v3/v3-types";
 import { clientHelloMessageToBuffer, entryAssignmentMessageToBuffer, serverHelloCompleteMessageToBuffer, serverHelloMessageToBuffer, V3EntryAssignmentMessage, V3ServerHelloCompleteMessage, V3ServerHelloMessage } from "../../protocol/v3/v3-messages";
 import { V3ClientHandshakeManager } from "../../protocol/v3/v3-nt-client";
+import Logger from "../../utils/logger";
 
 describe("V3 Client Handshake Manager", () => {
     it("should perform the handshake correctly", async (done) => {
@@ -11,7 +12,7 @@ describe("V3 Client Handshake Manager", () => {
             return Promise.resolve();
         }
 
-        const handshakeManager: V3ClientHandshakeManager = new V3ClientHandshakeManager("foo", toServer);
+        const handshakeManager: V3ClientHandshakeManager = new V3ClientHandshakeManager("foo", toServer, new Logger("TEST"));
 
         handshakeManager.beginHandshake();
         expect(serverBuffers.length).toBe(1);

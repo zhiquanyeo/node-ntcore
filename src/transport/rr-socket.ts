@@ -1,5 +1,6 @@
 import { EventEmitter } from "events";
 import { Socket } from "net";
+import Logger from "../utils/logger";
 import { NetworkEndpointInfo } from "./transport-types";
 
 export interface RRSocketOptions {
@@ -32,8 +33,17 @@ export default class RRSocket extends EventEmitter {
     private _address: string = "";
     private _port: number = 0;
 
-    constructor(options?: RRSocketOptions) {
+    private _logger: Logger;
+
+    constructor(options?: RRSocketOptions, logger?: Logger) {
         super();
+
+        if (logger) {
+            this._logger = logger;
+        }
+        else {
+            this._logger = new Logger("RRSocket");
+        }
 
         if (options) {
             if (options.address !== undefined) {
@@ -114,7 +124,7 @@ export default class RRSocket extends EventEmitter {
         clearTimeout(this._reconnectTimeoutHandle);
 
         if (!this._socketConnected) {
-            console.log(`[${this._ident}] socket not connected during disconnect`);
+            this._logger.info(`[${this._ident}] socket not connected during disconnect`);
             return;
         }
 
@@ -173,7 +183,7 @@ export default class RRSocket extends EventEmitter {
     private _attemptReconnect() {
         clearTimeout(this._reconnectTimeoutHandle);
         this._reconnectTimeoutHandle = setTimeout(() => {
-            console.log(`[${this._ident}] Reconnecting to ${this._address}:${this._port} (Socket Closed)`);
+            this._logger.info(`[${this._ident}] Reconnecting to ${this._address}:${this._port} (Socket Closed)`);
             this.emit("reconnectAttempt");
             this.connect();
         }, this._reconnectTimeoutDelayMs);
@@ -182,7 +192,7 @@ export default class RRSocket extends EventEmitter {
     private _doConnect() {
         this._socket.connect(this._port, this._address, () => {
             this._socketConnected = true;
-            console.log(`[${this._ident}] Connected to ${this._address}:${this._port}`);
+            this._logger.info(`[${this._ident}] Connected to ${this._address}:${this._port}`);
             this.emit("connected");
         });
     }

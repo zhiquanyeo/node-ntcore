@@ -6,6 +6,7 @@ import NTEntry, { NTEntryFlags, NTEntryType } from "../nt-entry";
 import NTServer, { NTServerOptions } from "../nt-server";
 import { clearAllEntriesMessageToBuffer, entryAssignmentMessageToBuffer, entryDeleteMessageToBuffer, entryFlagsUpdateMessageToBuffer, entryUpdateMessageToBuffer, getNextAvailableMessage, serverHelloCompleteMessageToBuffer, serverHelloMessageToBuffer, V3EntryAssignmentMessage, V3EntryDeleteMessage, V3EntryFlagsUpdateMessage, V3EntryUpdateMessage, V3Message, V3MessageWrapper, V3RPCExecuteMessage } from "./v3-messages";
 import { ntValueIsEqual } from "../protocol-utils";
+import Logger from "../../utils/logger";
 
 export interface V3ServerOptions extends NTServerOptions {
 
@@ -21,9 +22,12 @@ export class NTClientConnection extends EventEmitter {
 
     private _serverIdent: string;
 
-    constructor(socket: Socket, serverIdent: string, serverEntries: Map<number, NTEntry>) {
+    private _logger: Logger;
+
+    constructor(socket: Socket, serverIdent: string, serverEntries: Map<number, NTEntry>, logger: Logger) {
         super();
 
+        this._logger = logger;
         this._socket = socket;
         this._serverEntries = serverEntries;
 
@@ -108,7 +112,7 @@ export class NTClientConnection extends EventEmitter {
                 case V3MessageType.CLIENT_HELLO_COMPLETE:
                     break;
                 default: {
-                    console.log(`Dropping ${V3MessageTypeToString.get(lastMessage.type)} message (not handled)`);
+                    this._logger.debug(`Dropping ${V3MessageTypeToString.get(lastMessage.type)} message (not handled)`);
                 }
             }
         }
@@ -304,7 +308,7 @@ export default class V3NTServer extends NTServer {
     }
 
     protected _onSocketConnected(socket: Socket) {
-        const conn = new NTClientConnection(socket, this._identifier, this._entries);
+        const conn = new NTClientConnection(socket, this._identifier, this._entries, this._logger);
         this._connections.push(conn);
 
         conn.on("connectionClosed", () => {

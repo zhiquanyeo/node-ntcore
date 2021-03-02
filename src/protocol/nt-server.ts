@@ -1,4 +1,5 @@
 import net, { Server, Socket } from "net";
+import Logger from "../utils/logger";
 import NTParticipant, { NTParticipantOptions } from "./nt-participant";
 import { NTConnectionState, NTProtocolVersion } from "./nt-types";
 
@@ -18,6 +19,8 @@ export default abstract class NTServer extends NTParticipant {
     protected constructor(version: NTProtocolVersion, options: NTServerOptions = { port: 1735 }) {
         super(options);
 
+        this._logger = new Logger("NTServer");
+
         this._options = options;
         this._version = version;
 
@@ -28,7 +31,7 @@ export default abstract class NTServer extends NTParticipant {
 
     public start() {
         this._server.listen(this._options.port, () => {
-            console.log(`NT Server [${this._options.identifier}] listening on port ${this._options.port}`);
+            this._logger.info(`NT Server [${this._options.identifier}] listening on port ${this._options.port}`);
             this._setConnectionState(NTConnectionState.NTCONN_CONNECTED);
         });
     }

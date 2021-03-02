@@ -6,6 +6,7 @@ import { clientHelloCompleteMessageToBuffer, clientHelloMessageToBuffer, entryAs
 import NTEntry, { NTEntryFlags, NTEntryType } from "../nt-entry";
 import { NTEntryNotFoundError, NTEntryTypeMismatchError, NTEventUpdateSource, NTProtocolVersion, NTProtocolVersionUnsupportedError } from "../nt-types";
 import { ntValueIsEqual } from "../protocol-utils";
+import Logger from "../../utils/logger";
 
 export interface V3ClientOptions extends NTClientOptions {
 
@@ -24,6 +25,7 @@ interface HandshakeManagerEvents {
 type HandshakeManagerEventEmitter = StrictEventEmitter<EventEmitter, HandshakeManagerEvents>;
 
 export class V3ClientHandshakeManager extends (EventEmitter as new () => HandshakeManagerEventEmitter) {
+    private _logger: Logger;
     private _state: V3ClientHandshakeState = V3ClientHandshakeState.V3HS_NOT_CONNECTED;
 
     private _writeFunc: (data: Buffer) => Promise<void>;
@@ -34,8 +36,10 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
     private _serverSideEntries: Map<string, NTEntry> = new Map<string, NTEntry>();
     private _clientSideEntries: Map<string, NTEntry> = new Map<string, NTEntry>();
 
-    constructor(clientIdent: string, writeFunc: (data: Buffer) => Promise<void>) {
+    constructor(clientIdent: string, writeFunc: (data: Buffer) => Promise<void>, logger: Logger) {
         super();
+
+        this._logger = logger;
         this._writeFunc = writeFunc;
         this._ident = clientIdent;
     }
@@ -114,7 +118,7 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
                         flags: entryAssignmentMsg.entryFlags
                     };
 
-                    console.log("ENTRY ASSIGNMENT: ", entry);
+                    this._logger.debug("ENTRY ASSIGNMENT: ", entry);
                     this._serverSideEntries.set(entryAssignmentMsg.entryName, entry);
 
                     // Update the corresponding client-store
@@ -123,7 +127,7 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
 
                 }
                 else if (msg.type === V3MessageType.SERVER_HELLO_COMPLETE) {
-                    console.log("Received SERVER HELLO COMPLETE");
+                    this._logger.debug("Received SERVER HELLO COMPLETE");
 
                     // Then, for every one of the items in our client side
                     // store that is NOT in the serverside store, send an entryAssign
@@ -139,7 +143,7 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
                     });
 
                     if (entriesToSend.length > 0) {
-                        console.log(`${entriesToSend.length} client side entries to send`);
+                        this._logger.debug(`${entriesToSend.length} client side entries to send`);
 
                         entriesToSend.forEach(entry => {
                             this._writeFunc(entryAssignmentMessageToBuffer({
@@ -200,7 +204,7 @@ export default class V3NTClient extends NTClient {
 
         this._handshakeManager = new V3ClientHandshakeManager(this._identifier, (data: Buffer) => {
             return this._write(data, true);
-        });
+        }, this._logger);
 
         this._handshakeManager.protocolVersion = this.version;
     }
@@ -392,7 +396,7 @@ export default class V3NTClient extends NTClient {
         return new Promise((resolve, reject) => {
             this._handshakeManager.beginHandshake(this._entries, this._pendingEntries);
             this._handshakeManager.on("handshakeComplete", (data) => {
-                console.log("Handshake Complete");
+                this._logger.info("Handshake Complete");
                 // Update our client side with the new entries/updated
                 if (data) {
                     // Regenerate the entries
@@ -448,7 +452,7 @@ export default class V3NTClient extends NTClient {
                         }
                     });
 
-                    console.log(`Post Handshake: ${this._entries.size} server assigned entries, ${this._pendingEntries.size} pending entries`);
+                    this._logger.info(`Post Handshake: ${this._entries.size} server assigned entries, ${this._pendingEntries.size} pending entries`);
                 }
                 resolve();
             });
@@ -472,7 +476,7 @@ export default class V3NTClient extends NTClient {
 
         let nextMessageResult: V3MessageWrapper;
         while (nextMessageResult = getNextAvailableMessage(this._rpcDefinitions, this._dataBuffer)) {
-            console.log("GOT A MESSAGE: ", V3MessageTypeToString.get(nextMessageResult.message.type));
+            this._logger.debug("GOT A MESSAGE: ", V3MessageTypeToString.get(nextMessageResult.message.type));
             this._pendingMessages.push(nextMessageResult.message);
             this._dataBuffer = Buffer.from(this._dataBuffer.slice(nextMessageResult.newOffset));
         }
@@ -516,7 +520,7 @@ export default class V3NTClient extends NTClient {
                     } break;
                     // NOTE: We don't handle RPC_EXECUTE messages as a client
                     default: {
-                        console.log(`Dropping ${V3MessageTypeToString.get(lastMessage.type)} message (not handled)`);
+                        this._logger.debug(`Dropping ${V3MessageTypeToString.get(lastMessage.type)} message (not handled)`);
                     }
                 }
             }
@@ -534,7 +538,7 @@ export default class V3NTClient extends NTClient {
         else if (this._pendingEntries.has(msg.entryName)) {
             isPendingEntry = true;
             // Promote this pending entry into a real entry
-            console.log(`Promoting ${msg.entryName} from pending to full entry`);
+            this._logger.debug(`Promoting ${msg.entryName} from pending to full entry`);
 
             const pendingEntry = this._pendingEntries.get(msg.entryName);
             if (!ntValueIsEqual(pendingEntry.value, msg.entryValue)) {
@@ -553,11 +557,11 @@ export default class V3NTClient extends NTClient {
         });
         this._entryNameToId.set(msg.entryName, msg.entryId);
 
-        console.log(`Added new entry ${msg.entryName}: `, this._entries.get(msg.entryId));
+        this._logger.debug(`Added new entry ${msg.entryName}: `, this._entries.get(msg.entryId));
 
         if (msg.entryType === V3EntryType.RPC) {
             this._rpcDefinitions.set(msg.entryId, (msg.entryValue as V3RPCDefinition));
-            console.log(`Added new RPC Definition ${msg.entryName}: `, msg.entryValue);
+            this._logger.debug(`Added new RPC Definition ${msg.entryName}: `, msg.entryValue);
         }
 
         if (!isPendingEntry) {
@@ -582,7 +586,7 @@ export default class V3NTClient extends NTClient {
             entry.seq = msg.entrySeq;
             entry.value = {...msg.entryValue}
 
-            console.log(`Updated entry ${entry.name}: `, entry);
+            this._logger.debug(`Updated entry ${entry.name}: `, entry);
             this.emit("entryUpdated", {
                 source: NTEventUpdateSource.REMOTE,
                 entry: {...entry}
@@ -595,7 +599,7 @@ export default class V3NTClient extends NTClient {
             const entry = this._entries.get(msg.entryId);
             entry.flags = {...msg.entryFlags};
 
-            console.log(`Updated Entry Flags ${entry.name}: `, entry);
+            this._logger.debug(`Updated Entry Flags ${entry.name}: `, entry);
             this.emit("entryFlagsUpdated", {
                 source: NTEventUpdateSource.REMOTE,
                 entry: {...entry}
@@ -610,7 +614,7 @@ export default class V3NTClient extends NTClient {
             this._entries.delete(entry.id);
             this._entryNameToId.delete(entry.name);
 
-            console.log(`Deleted Entry: ${entry.name}`);
+            this._logger.debug(`Deleted Entry: ${entry.name}`);
             this.emit("entryDeleted", {
                 source: NTEventUpdateSource.REMOTE,
                 entry: {...entry}

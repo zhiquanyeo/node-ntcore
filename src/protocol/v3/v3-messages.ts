@@ -473,7 +473,7 @@ export function entryValueFromBuffer(type: V3EntryType, buf: Buffer, offset: num
             // The buffer starting at bufLenResult.offset now holds the RPC
             // definition entry
             const rpcDefinitionResult = decodeRPCDefinition(buf, bufLenResult.offset);
-            
+
             return {
                 value: {
                     rpc: rpcDefinitionResult.value
@@ -705,7 +705,7 @@ export function rpcExecuteMessageToBuffer(msg: V3RPCExecuteMessage): Buffer {
     const headerBuf = Buffer.alloc(3);
     headerBuf[0] = V3MessageType.RPC_EXECUTE;
     headerBuf.writeUInt16BE(msg.rpcDefinitionId, 1);
-    
+
     const idBuf = Buffer.alloc(2);
     idBuf.writeUInt16BE(msg.uniqueId);
 
@@ -964,7 +964,6 @@ export function getNextAvailableMessage(rpcDefinitions: Map<number, V3RPCDefinit
         }
     }
     catch(e) {
-        console.log("Error while parsing message: ", e);
         return undefined;
     }
 }

@@ -1,5 +1,6 @@
 import { EventEmitter } from "events";
 import { Socket } from "net";
+import Logger from "../utils/logger";
 import StrictEventEmitter from "strict-event-emitter-types/types/src";
 
 const DS_INTERFACE_PORT = 1742;
@@ -23,9 +24,18 @@ export default class DSClient extends (EventEmitter as new () => DSClientEventEm
 
     private _bufferStr: string;
 
-    constructor() {
+    private _logger: Logger
+
+    constructor(logger?: Logger) {
         super();
         this._socket = new Socket();
+
+        if (logger) {
+            this._logger = logger;
+        }
+        else {
+            this._logger = new Logger("DSClient");
+        }
 
         this._socket.on("data", (data: Buffer) => {
             if (!this._bufferStr) {
@@ -87,7 +97,7 @@ export default class DSClient extends (EventEmitter as new () => DSClientEventEm
                 }
             }
             catch (err) {
-                console.log("Failed to parse JSON: ", err);
+                this._logger.error("Failed to parse JSON: ", err);
             }
             this._bufferStr = this._bufferStr.substring(match.index + 1);
         }

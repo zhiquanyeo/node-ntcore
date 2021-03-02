@@ -2,6 +2,7 @@ import { NetworkEndpointInfo } from "../transport/transport-types";
 import RRSocket from "../transport/rr-socket";
 import NTParticipant, { NTParticipantOptions } from "./nt-participant";
 import { NTConnectionState, NTProtocolVersion, NTProtocolVersionUnsupportedError } from "./nt-types";
+import Logger from "../utils/logger";
 
 export interface NTClientOptions extends NTParticipantOptions {
     address: string;
@@ -10,16 +11,19 @@ export interface NTClientOptions extends NTParticipantOptions {
 
 export default abstract class NTClient extends NTParticipant {
     protected _socket: RRSocket;
-    
+
     protected constructor(version: NTProtocolVersion, options: NTClientOptions = { address: "localhost", port: 1735}) {
         super(options);
+
+        this._logger = new Logger("NTClient");
 
         this._version = version;
 
         this._socket = new RRSocket({
             address: options.address,
-            port: options.port
-        });
+            port: options.port,
+            ident: "NTClientSocket"
+        }, this._logger);
 
         // Hookup events
         this._socket.on("connected", async () => {
@@ -33,7 +37,7 @@ export default abstract class NTClient extends NTParticipant {
             catch(err) {
                 this._setConnectionState(NTConnectionState.NTCONN_NOT_CONNECTED);
                 if (err instanceof NTProtocolVersionUnsupportedError) {
-                    console.log(`Unsupported version requested. Server supports ${err.serverSupportedVersion.major}.${err.serverSupportedVersion.minor}`);
+                    this._logger.warn(`Unsupported version requested. Server supports ${err.serverSupportedVersion.major}.${err.serverSupportedVersion.minor}`);
                 }
 
                 // Re-throw the error
@@ -88,7 +92,7 @@ export default abstract class NTClient extends NTParticipant {
         return this._socket.write(data);
     }
 
-    
+
 
     protected abstract _handshake(): Promise<void>;
     protected abstract _handleData(data: Buffer): void;

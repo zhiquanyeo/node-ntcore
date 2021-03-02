@@ -8,6 +8,7 @@ import NetworkTableEntry, { NetworkTableEntryFlags, NTEntryFunctions } from "./n
 import NetworkTable from "./network-table";
 import NTClient from "../protocol/nt-client";
 import NetworkTableValue from "./network-table-value";
+import Logger from "../utils/logger";
 
 const DEFAULT_NT_PORT = 1735;
 export const NT_PATH_SEPARATOR = "/";
@@ -144,6 +145,8 @@ export default class NetworkTableInstance {
     // INSTANCE METHODS AND PROPERTIES
     private _guid: string;
 
+    private _logger: Logger;
+
     // Stores all the registered raw NTEntry objects
     // These represent actual, live data
     private _ntEntries: Map<string, RawNTEntryInfo> = new Map<string, RawNTEntryInfo>();
@@ -172,6 +175,8 @@ export default class NetworkTableInstance {
 
     protected constructor(guid: string) {
         this._guid = guid;
+
+        this._logger = new Logger("NT");
         // Set up the NTEntryFunctions
 
         this._entryFuncs = {
@@ -213,19 +218,19 @@ export default class NetworkTableInstance {
 
     public getEntry(key: string): NetworkTableEntry {
         if (this._entryGuidMap.has(key)) {
-            console.log("Found a previously cached entry for ", key);
+            this._logger.debug("Found a previously cached entry for ", key);
             // We have a previously cached NetworkTableEntry
             const entryGuid = this._entryGuidMap.get(key);
             return this._entries.get(entryGuid).entry;
         }
         else if (this._pendingEntryGuids.has(key)) {
-            console.log("Found a previously cached entry (pending) for ", key);
+            this._logger.debug("Found a previously cached entry (pending) for ", key);
             // We have a previously cached PENDING NetworkTableEntry
             const entryGuid = this._pendingEntryGuids.get(key);
             return this._entries.get(entryGuid).entry;
         }
         else {
-            console.log("Creating pending entry for ", key);
+            this._logger.debug("Creating pending entry for ", key);
             // Create the entry accessor anyway
             const entryGuid = uuidv4();
             const newEntry = new NetworkTableEntry(this, key, entryGuid, this._entryFuncs);
@@ -280,7 +285,7 @@ export default class NetworkTableInstance {
         const results: NetworkTableEntry[] = keys.map(key => {
             return this.getEntry(key);
         });
-        
+
         return results;
     }
 
@@ -338,7 +343,7 @@ export default class NetworkTableInstance {
     public startClient(hostAddr: string, port: number = DEFAULT_NT_PORT) {
 
         if (this._opMode !== OperatingMode.UNCONFIGURED && this._connState !== ConnectionState.OFFLINE) {
-            console.log("Bailing early");
+            this._logger.info("Cannot start client");
             return;
         }
 
@@ -347,7 +352,7 @@ export default class NetworkTableInstance {
                 this._ntParticipant.removeAllListeners();
             }
 
-            console.log("Creating new client");
+            this._logger.info("Creating new NT client");
             this._ntParticipant = new V3NTClient({
                 address: hostAddr,
                 port,
@@ -424,10 +429,10 @@ export default class NetworkTableInstance {
             if (newState === NTConnectionState.NTCONN_CONNECTED) {
                 this._connState = ConnectionState.ONLINE;
 
-                console.log("Flushing updates");
+                this._logger.debug("Flushing updates");
                 // Flush any pending entries
                 this._pendingNtEntries.forEach((value, key) => {
-                    console.log("Flushing entry ", value.entry.name);
+                    this._logger.debug("Flushing entry ", value.entry.name);
                     // TODO This is exactly the same logic as the code in onEntryAdded
                     // refactor into a helper function
                     switch (value.entry.type) {
@@ -483,7 +488,7 @@ export default class NetworkTableInstance {
     }
 
     private _onEntryAdded(evt: NTEntryEvent) {
-        console.log("ENTRY ADDED EVENT", evt);
+        this._logger.debug("ENTRY ADDED EVENT", evt);
         const key = evt.entry.name;
 
         // Add this to our collection
@@ -500,17 +505,17 @@ export default class NetworkTableInstance {
         if (this._pendingEntryGuids.has(key)) {
             if (this._entryGuidMap.has(key)) {
                 // ERROR!
-                console.log("Error?? Already have an entry guid for this");
+                this._logger.warn("Error?? Already have an entry guid for this");
             }
             else {
-                console.log("PROMOTING pending entry to full entry");
+                this._logger.debug("PROMOTING pending entry to full entry");
                 this._entryGuidMap.set(key, this._pendingEntryGuids.get(key));
                 this._pendingEntryGuids.delete(key);
 
                 // If the update source was local, push
                 if (evt.source === NTEventUpdateSource.LOCAL && evt.entry.id === 0xFFFF) {
                     if (this._ntParticipant) {
-                        console.log("Updating on remote");
+                        this._logger.debug("Updating on remote");
                         // We need to set this on the NT Participant too
                         switch (evt.entry.type) {
                             case NTEntryType.BOOLEAN: {
@@ -680,17 +685,17 @@ export default class NetworkTableInstance {
 
         if (entryInfo) {
             switch (entryInfo.entry.type) {
-                case NTEntryType.BOOLEAN: 
+                case NTEntryType.BOOLEAN:
                     return NetworkTableValue.makeBoolean(entryInfo.entry.value.bool);
-                case NTEntryType.BOOLEAN_ARRAY: 
+                case NTEntryType.BOOLEAN_ARRAY:
                     return NetworkTableValue.makeBooleanArray(entryInfo.entry.value.bool_array);
-                case NTEntryType.DOUBLE: 
+                case NTEntryType.DOUBLE:
                     return NetworkTableValue.makeDouble(entryInfo.entry.value.double);
-                case NTEntryType.DOUBLE_ARRAY: 
+                case NTEntryType.DOUBLE_ARRAY:
                     return NetworkTableValue.makeDoubleArray(entryInfo.entry.value.double_array);
-                case NTEntryType.STRING: 
+                case NTEntryType.STRING:
                     return NetworkTableValue.makeString(entryInfo.entry.value.str);
-                case NTEntryType.STRING_ARRAY: 
+                case NTEntryType.STRING_ARRAY:
                     return NetworkTableValue.makeStringArray(entryInfo.entry.value.str_array);
                 case NTEntryType.RAW:
                     return NetworkTableValue.makeRaw(entryInfo.entry.value.raw);

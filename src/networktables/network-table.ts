@@ -116,14 +116,14 @@ export default class NetworkTable {
     public addEntryListener(key: string | null, listener: TableEntryListener, listenerFlags: EntryListenerFlags): string {
         if (key !== null) {
             const entry = this.getEntry(key);
-            return this._instance.addEntryListener(entry, 
+            return this._instance.addEntryListener(entry,
                 (key, entry, value, flags) => {
                     listener(this, key, entry, value, flags);
                 }, listenerFlags);
         }
-        
+
         const prefixLen = this._path.length + 1;
-        return this._instance.addEntryListener(this._path, 
+        return this._instance.addEntryListener(this._path,
             (key, entry, value, flags) => {
                 const relativeKey = key.substring(prefixLen);
                 if (relativeKey.indexOf(NT_PATH_SEPARATOR) !== -1) {
@@ -139,7 +139,7 @@ export default class NetworkTable {
     public removeEntryListener(guid: string) {
         this._instance.removeEntryListener(guid);
     }
-    
+
     public addSubTableListener(listener: TableCreationListener, localNotify: boolean) {
         let flags = EntryListenerFlags.NEW | EntryListenerFlags.IMMEDIATE;
 
@@ -147,7 +147,6 @@ export default class NetworkTable {
             flags |= EntryListenerFlags.LOCAL;
         }
 
-        console.log("Path: ", this._path);
         const prefixLen = this._path.length + 1;
         const parent: NetworkTable = this;
 
@@ -155,7 +154,6 @@ export default class NetworkTable {
         return this._instance.addEntryListener(this._pathWithSep,
             (key, entry, value, flags) => {
                 const relativeKey = key.substring(prefixLen);
-                console.log("Relative Key: ", relativeKey);
                 const endSubTable = relativeKey.indexOf(NT_PATH_SEPARATOR);
                 if (endSubTable === -1) {
                     return;
