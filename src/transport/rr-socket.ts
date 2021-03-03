@@ -97,8 +97,8 @@ export default class RRSocket extends EventEmitter {
         return this._socketConnected;
     }
 
-    public setNetworkEndpoint(endpoint: NetworkEndpointInfo): void {
-        if (endpoint.address !== this._address || endpoint.port !== this._port) {
+    public setNetworkEndpoint(endpoint: NetworkEndpointInfo, forceReconnect: boolean = false): void {
+        if (forceReconnect || endpoint.address !== this._address || endpoint.port !== this._port) {
             this._address = endpoint.address;
             this._port = endpoint.port;
 
@@ -180,7 +180,7 @@ export default class RRSocket extends EventEmitter {
             this._socketConnected = false;
 
             this._attemptReconnect();
-        })
+        });
     }
 
     private _attemptReconnect() {

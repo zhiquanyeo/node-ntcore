@@ -75,8 +75,8 @@ export default abstract class NTClient extends NTParticipant {
         return this._socket.port;
     }
 
-    public setServerEndpoint(endpoint: NetworkEndpointInfo) {
-        this._socket.setNetworkEndpoint(endpoint);
+    public setServerEndpoint(endpoint: NetworkEndpointInfo, forceReconnect: boolean = false) {
+        this._socket.setNetworkEndpoint(endpoint, forceReconnect);
     }
 
     public start() {
