@@ -27,6 +27,7 @@ export default abstract class NTClient extends NTParticipant {
 
         // Hookup events
         this._socket.on("connected", async () => {
+            this._logger.info("TCP socket connected. Initiating handshake");
             // The "connected" event represents that the transport layer
             // (i.e. TCP) is now connected. We can initiate handshaking
             try {
