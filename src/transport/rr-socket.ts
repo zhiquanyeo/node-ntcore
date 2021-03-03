@@ -130,7 +130,9 @@ export default class RRSocket extends EventEmitter {
 
         if (this._socket) {
             this._socket.removeAllListeners();
-            this._socket.end();
+            this._socket.end(() => {
+                this._logger.info("TCP Socket disconnected");
+            });
             this._socketConnected = false;
             this.emit("close", false);
 
@@ -167,7 +169,8 @@ export default class RRSocket extends EventEmitter {
         });
 
         this._socket.on("error", err => {
-            if (err.message.indexOf("ECONNREFUSED") !== -1) {
+            if (err.message.indexOf("ECONNREFUSED") !== -1 ||
+                err.message.indexOf("ECONNRESET") !== -1) {
                 this._attemptReconnect();
             }
         });
