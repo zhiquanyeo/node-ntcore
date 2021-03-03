@@ -1,6 +1,6 @@
 // `networktables` package
-import NetworkTableInstance from "./networktables/network-table-instance";
-export { NetworkTableInstance };
+import NetworkTableInstance, { EntryListenerFlags, EntryListener, OperatingMode, ConnectionState } from "./networktables/network-table-instance";
+export { NetworkTableInstance, EntryListenerFlags, EntryListener, OperatingMode, ConnectionState };
 
 import NetworkTable from "./networktables/network-table";
 export { NetworkTable };
