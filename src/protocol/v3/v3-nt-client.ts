@@ -53,6 +53,7 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
     }
 
     public beginHandshake(clientEntries?: Map<number, NTEntry>, pendingEntries?: Map<string, NTEntry>) {
+        this._logger.debugEx("Beginning Handshake");
         // Clear out the maps
         this._serverSideEntries.clear();
         this._clientSideEntries.clear();
@@ -72,12 +73,16 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
             });
         }
 
+        this._logger.debugEx("Preparing to send CLIENT HELLO");
         this._writeFunc(clientHelloMessageToBuffer({
             type: V3MessageType.CLIENT_HELLO,
             clientIdent: this._ident,
             protocolMajor: this._protocolVersion.major,
             protocolMinor: this._protocolVersion.minor
-        }));
+        }))
+        .then(() => {
+            this._logger.debugEx("CLIENT HELLO sent");
+        });
 
         const oldState = this._state;
         this._state = V3ClientHandshakeState.V3HS_AWAIT_SERVER_HELLO;

@@ -3,7 +3,8 @@ export enum LogSeverity {
     ERROR = 1,
     WARNING = 2,
     INFO = 3,
-    DEBUG = 4
+    DEBUG = 4,
+    DEBUG_EX = 5
 }
 
 function SeverityToString(sev: LogSeverity): string {
@@ -18,6 +19,8 @@ function SeverityToString(sev: LogSeverity): string {
             return "ERROR: ";
         case LogSeverity.FATAL:
             return "FATAL: ";
+        case LogSeverity.DEBUG_EX:
+            return "DEBUG_EX: ";
     }
 }
 
@@ -41,6 +44,10 @@ export default class Logger {
         if (level <= this._severity) {
             console.log(`[${this._ident}] ${SeverityToString(level)}`, ...args);
         }
+    }
+
+    public debugEx(...args: any[]) {
+        this.log(LogSeverity.DEBUG_EX, ...args);
     }
 
     public debug(...args: any[]) {

@@ -35,6 +35,8 @@ export default class RRSocket extends EventEmitter {
 
     private _logger: Logger;
 
+    private _reconnectCount = 0;
+
     constructor(options?: RRSocketOptions, logger?: Logger) {
         super();
 
@@ -114,6 +116,10 @@ export default class RRSocket extends EventEmitter {
             return;
         }
 
+        if (this._socket) {
+            this._socket.removeAllListeners();
+        }
+
         this._socket = new Socket();
         this._hookupEvents();
 
@@ -186,7 +192,13 @@ export default class RRSocket extends EventEmitter {
     private _attemptReconnect() {
         clearTimeout(this._reconnectTimeoutHandle);
         this._reconnectTimeoutHandle = setTimeout(() => {
-            this._logger.info(`[${this._ident}] Reconnecting to ${this._address}:${this._port} (Socket Closed)`);
+            this._reconnectCount++;
+            this._logger.debug(`[${this._ident}] Reconnecting to ${this._address}:${this._port} (Socket Closed)`);
+
+            if (this._reconnectCount % 10 === 0) {
+                this._logger.info(`[${this._ident}] ${this._reconnectCount} reconnect attempt(s) so far...`);
+            }
+
             this.emit("reconnectAttempt");
             this.connect();
         }, this._reconnectTimeoutDelayMs);
@@ -197,6 +209,7 @@ export default class RRSocket extends EventEmitter {
             this._socketConnected = true;
             this._logger.info(`[${this._ident}] Connected to ${this._address}:${this._port}`);
             this.emit("connected");
+            this._reconnectCount = 0;
         });
     }
 }
