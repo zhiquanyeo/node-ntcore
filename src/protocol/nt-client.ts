@@ -2,7 +2,6 @@ import { NetworkEndpointInfo } from "../transport/transport-types";
 import RRSocket from "../transport/rr-socket";
 import NTParticipant, { NTParticipantOptions } from "./nt-participant";
 import { NTConnectionState, NTProtocolVersion, NTProtocolVersionUnsupportedError } from "./nt-types";
-import Logger from "../utils/logger";
 
 export interface NTClientOptions extends NTParticipantOptions {
     address: string;
@@ -15,25 +14,24 @@ export default abstract class NTClient extends NTParticipant {
     protected constructor(version: NTProtocolVersion, options: NTClientOptions = { address: "localhost", port: 1735}) {
         super(options);
 
-        this._logger = new Logger("NTClient");
-
         this._version = version;
 
         this._socket = new RRSocket({
             address: options.address,
             port: options.port,
-            ident: "NTClientSocket"
+            ident: "NTCORE-SOCKET"
         }, this._logger);
 
         // Hookup events
         this._socket.on("connected", async () => {
-            this._logger.info("TCP socket connected. Initiating handshake");
+            this._logger.debug("TCP socket connected. Initiating handshake");
             // The "connected" event represents that the transport layer
             // (i.e. TCP) is now connected. We can initiate handshaking
             try {
                 this._setConnectionState(NTConnectionState.NTCONN_CONNECTING);
                 await this._handshake();
                 this._setConnectionState(NTConnectionState.NTCONN_CONNECTED);
+                this._logger.info(`NT Connection established to ${this._socket.address}:${this._socket.port}`);
             }
             catch(err) {
                 this._setConnectionState(NTConnectionState.NTCONN_NOT_CONNECTED);
@@ -51,6 +49,7 @@ export default abstract class NTClient extends NTParticipant {
         });
 
         this._socket.on("close", () => {
+            this._logger.info("NT Connection lost");
             this._setConnectionState(NTConnectionState.NTCONN_NOT_CONNECTED);
         });
     }

@@ -8,7 +8,9 @@ import NetworkTableEntry, { NetworkTableEntryFlags, NTEntryFunctions } from "./n
 import NetworkTable from "./network-table";
 import NTClient from "../protocol/nt-client";
 import NetworkTableValue from "./network-table-value";
-import Logger, { LogSeverity } from "../utils/logger";
+
+import winston from "winston";
+import LogUtil, { LogLevel } from "../utils/log-util";
 
 const DEFAULT_NT_PORT = 1735;
 export const NT_PATH_SEPARATOR = "/";
@@ -145,7 +147,8 @@ export default class NetworkTableInstance {
     // INSTANCE METHODS AND PROPERTIES
     private _guid: string;
 
-    private _logger: Logger;
+    private _logger: winston.Logger;
+    private _logLevel: LogLevel = LogLevel.info;
 
     // Stores all the registered raw NTEntry objects
     // These represent actual, live data
@@ -176,7 +179,7 @@ export default class NetworkTableInstance {
     protected constructor(guid: string) {
         this._guid = guid;
 
-        this._logger = new Logger("NT");
+        this._logger = LogUtil.getLogger("NTCORE");
         // Set up the NTEntryFunctions
 
         this._entryFuncs = {
@@ -204,16 +207,31 @@ export default class NetworkTableInstance {
         }
     }
 
-    public set logSeverity(val: LogSeverity) {
-        this._logger.severity = val;
+    public setLogLevel(val: LogLevel | string) {
+        let level = LogLevel.info;
 
-        if (this._ntParticipant) {
-            this._ntParticipant.logSeverity = val;
+        if (val === "error") {
+            level = LogLevel.error;
         }
-    }
+        else if (val === "warn") {
+            level = LogLevel.warn;
+        }
+        else if (val === "info") {
+            level = LogLevel.info;
+        }
+        else if (val === "verbose") {
+            level = LogLevel.verbose;
+        }
+        else if (val === "debug") {
+            level = LogLevel.debug;
+        }
+        else if (val === "silly") {
+            level = LogLevel.silly;
+        }
 
-    public get logSeverity(): LogSeverity {
-        return this._logger.severity;
+        this._logLevel = level;
+
+        LogUtil.setLogLevel(level);
     }
 
     public get guid(): string {
@@ -371,9 +389,6 @@ export default class NetworkTableInstance {
                 identifier: this._netIdentity
             });
 
-            // Also set up the logging severity
-            this._ntParticipant.logSeverity = this.logSeverity;
-
             this._hookupNTEvents();
         }
 
@@ -405,9 +420,6 @@ export default class NetworkTableInstance {
                 port,
                 identifier: this._netIdentity
             });
-
-            // Also set up the logging severity
-            this._ntParticipant.logSeverity = this.logSeverity;
 
             this._hookupNTEvents();
         }

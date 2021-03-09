@@ -1,7 +1,8 @@
 import { EventEmitter } from "events";
 import { Socket } from "net";
-import Logger from "../utils/logger";
 import StrictEventEmitter from "strict-event-emitter-types/types/src";
+import winston from "winston";
+import LogUtil from "../utils/log-util";
 
 const DS_INTERFACE_PORT = 1742;
 
@@ -24,9 +25,9 @@ export default class DSClient extends (EventEmitter as new () => DSClientEventEm
 
     private _bufferStr: string;
 
-    private _logger: Logger
+    private _logger: winston.Logger;
 
-    constructor(logger?: Logger) {
+    constructor(logger?: winston.Logger) {
         super();
         this._socket = new Socket();
 
@@ -34,7 +35,7 @@ export default class DSClient extends (EventEmitter as new () => DSClientEventEm
             this._logger = logger;
         }
         else {
-            this._logger = new Logger("DSClient");
+            this._logger = LogUtil.getLogger("DSClient");
         }
 
         this._socket.on("data", (data: Buffer) => {

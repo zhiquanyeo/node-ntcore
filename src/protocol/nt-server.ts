@@ -1,7 +1,7 @@
 import net, { Server, Socket } from "net";
-import Logger from "../utils/logger";
 import NTParticipant, { NTParticipantOptions } from "./nt-participant";
 import { NTConnectionState, NTProtocolVersion } from "./nt-types";
+import LogUtil from "../utils/log-util";
 
 export interface NTServerOptions extends NTParticipantOptions {
     port: number;
@@ -18,8 +18,6 @@ export default abstract class NTServer extends NTParticipant {
 
     protected constructor(version: NTProtocolVersion, options: NTServerOptions = { port: 1735 }) {
         super(options);
-
-        this._logger = new Logger("NTServer");
 
         this._options = options;
         this._version = version;

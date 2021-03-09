@@ -6,7 +6,8 @@ import NTEntry, { NTEntryFlags, NTEntryType } from "../nt-entry";
 import NTServer, { NTServerOptions } from "../nt-server";
 import { clearAllEntriesMessageToBuffer, entryAssignmentMessageToBuffer, entryDeleteMessageToBuffer, entryFlagsUpdateMessageToBuffer, entryUpdateMessageToBuffer, getNextAvailableMessage, serverHelloCompleteMessageToBuffer, serverHelloMessageToBuffer, V3EntryAssignmentMessage, V3EntryDeleteMessage, V3EntryFlagsUpdateMessage, V3EntryUpdateMessage, V3Message, V3MessageWrapper, V3RPCExecuteMessage } from "./v3-messages";
 import { ntValueIsEqual } from "../protocol-utils";
-import Logger from "../../utils/logger";
+import winston from "winston";
+import LogUtil from "../../utils/log-util";
 
 export interface V3ServerOptions extends NTServerOptions {
 
@@ -22,9 +23,9 @@ export class NTClientConnection extends EventEmitter {
 
     private _serverIdent: string;
 
-    private _logger: Logger;
+    private _logger: winston.Logger;
 
-    constructor(socket: Socket, serverIdent: string, serverEntries: Map<number, NTEntry>, logger: Logger) {
+    constructor(socket: Socket, serverIdent: string, serverEntries: Map<number, NTEntry>, logger: winston.Logger) {
         super();
 
         this._logger = logger;
@@ -131,6 +132,8 @@ export default class V3NTServer extends NTServer {
 
     constructor(options?: V3ServerOptions) {
         super({ major: 3, minor: 0 }, options);
+
+        this._logger = LogUtil.getLogger("NTCORE-SERVER-V3");
     }
 
     public setBoolean(key: string, val: boolean): boolean {

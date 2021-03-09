@@ -126,6 +126,7 @@ describe("RRSocket", () => {
                 expect(events).toEqual([
                     "server-connect",
                     "connected",
+                    "close",
                     "reconnectAttempt",
                     "server-connect",
                     "connected",

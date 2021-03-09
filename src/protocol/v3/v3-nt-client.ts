@@ -6,7 +6,8 @@ import { clientHelloCompleteMessageToBuffer, clientHelloMessageToBuffer, entryAs
 import NTEntry, { NTEntryFlags, NTEntryType } from "../nt-entry";
 import { NTEntryNotFoundError, NTEntryTypeMismatchError, NTEventUpdateSource, NTProtocolVersion, NTProtocolVersionUnsupportedError } from "../nt-types";
 import { ntValueIsEqual } from "../protocol-utils";
-import Logger from "../../utils/logger";
+import winston from "winston";
+import LogUtil from "../../utils/log-util";
 
 export interface V3ClientOptions extends NTClientOptions {
 
@@ -25,7 +26,7 @@ interface HandshakeManagerEvents {
 type HandshakeManagerEventEmitter = StrictEventEmitter<EventEmitter, HandshakeManagerEvents>;
 
 export class V3ClientHandshakeManager extends (EventEmitter as new () => HandshakeManagerEventEmitter) {
-    private _logger: Logger;
+    private _logger: winston.Logger;
     private _state: V3ClientHandshakeState = V3ClientHandshakeState.V3HS_NOT_CONNECTED;
 
     private _writeFunc: (data: Buffer) => Promise<void>;
@@ -36,7 +37,7 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
     private _serverSideEntries: Map<string, NTEntry> = new Map<string, NTEntry>();
     private _clientSideEntries: Map<string, NTEntry> = new Map<string, NTEntry>();
 
-    constructor(clientIdent: string, writeFunc: (data: Buffer) => Promise<void>, logger: Logger) {
+    constructor(clientIdent: string, writeFunc: (data: Buffer) => Promise<void>, logger: winston.Logger) {
         super();
 
         this._logger = logger;
@@ -53,7 +54,7 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
     }
 
     public beginHandshake(clientEntries?: Map<number, NTEntry>, pendingEntries?: Map<string, NTEntry>) {
-        this._logger.debugEx("Beginning Handshake");
+        this._logger.silly("Beginning Handshake");
         // Clear out the maps
         this._serverSideEntries.clear();
         this._clientSideEntries.clear();
@@ -73,7 +74,7 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
             });
         }
 
-        this._logger.debugEx("Preparing to send CLIENT HELLO");
+        this._logger.silly("Preparing to send CLIENT HELLO");
         this._writeFunc(clientHelloMessageToBuffer({
             type: V3MessageType.CLIENT_HELLO,
             clientIdent: this._ident,
@@ -81,7 +82,7 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
             protocolMinor: this._protocolVersion.minor
         }))
         .then(() => {
-            this._logger.debugEx("CLIENT HELLO sent");
+            this._logger.silly("CLIENT HELLO sent");
         });
 
         const oldState = this._state;
@@ -148,7 +149,7 @@ export class V3ClientHandshakeManager extends (EventEmitter as new () => Handsha
                     });
 
                     if (entriesToSend.length > 0) {
-                        this._logger.info(`${entriesToSend.length} client side entries to send`);
+                        this._logger.debug(`${entriesToSend.length} client side entries to send`);
 
                         entriesToSend.forEach(entry => {
                             this._writeFunc(entryAssignmentMessageToBuffer({
@@ -199,6 +200,8 @@ export default class V3NTClient extends NTClient {
 
     constructor(options?: V3ClientOptions) {
         super({major: 3, minor: 0}, options);
+
+        this._logger = LogUtil.getLogger("NTCORE-CLIENT-V3");
 
         if (options && options.identifier) {
             this._identifier = options.identifier;
@@ -401,7 +404,7 @@ export default class V3NTClient extends NTClient {
         return new Promise((resolve, reject) => {
             this._handshakeManager.beginHandshake(this._entries, this._pendingEntries);
             this._handshakeManager.once("handshakeComplete", (data) => {
-                this._logger.info("Handshake Complete");
+                this._logger.debug("Handshake Complete");
                 // Update our client side with the new entries/updated
                 if (data) {
                     // Regenerate the entries
@@ -457,7 +460,7 @@ export default class V3NTClient extends NTClient {
                         }
                     });
 
-                    this._logger.info(`Post Handshake: ${this._entries.size} server assigned entries, ${this._pendingEntries.size} pending entries`);
+                    this._logger.debug(`Post Handshake: ${this._entries.size} server assigned entries, ${this._pendingEntries.size} pending entries`);
                 }
                 resolve();
             });
