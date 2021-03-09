@@ -8,5 +8,5 @@ export { NetworkTable };
 import NetworkTableEntry, { NetworkTableEntryFlags } from "./networktables/network-table-entry";
 export { NetworkTableEntry, NetworkTableEntryFlags };
 
-import { LogSeverity } from "./utils/logger"
-export { LogSeverity }
+import { LogLevel } from "./utils/log-util"
+export { LogLevel }
