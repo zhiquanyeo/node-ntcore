@@ -121,7 +121,7 @@ function checkEntryValue(type: V3EntryType, valueObj: NTEntryValue) {
 }
 
 export function entryFlagsToUInt8(flags: V3EntryFlags): number {
-    return (flags.persistent ? 1 : 0);
+    return (typeof flags == "object" && flags !== null && flags.persistent ? 1 : 0);
 }
 
 export function UInt8ToEntryFlags(flagByte: number): V3EntryFlags {
