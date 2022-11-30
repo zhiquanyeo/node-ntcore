@@ -542,13 +542,12 @@ export default class V3NTClient extends NTClient {
 
         // Getting an entry assignment from the server
         if (this._entryNameToId.has(msg.entryName)) {
-            //throw new Error(`Client has an existing key ${msg.entryName}`);
-			let entry = this._entries.get(msg.entryId);
-			this._logger.info("Client has existing key, deleting: " + msg.entryName + 
-				" id: " + msg.entryId + 
-				" NetworkTableType old: " + toNetworkTableType(entry.type) + 
-				" new: " + toNetworkTableType(V3toNTEntryType.get(msg.entryType)) );
-			this.emit("entryDeleted", {
+            let entry = this._entries.get(msg.entryId);
+            this._logger.info("Client has existing key, deleting: " + msg.entryName + 
+                " id: " + msg.entryId + 
+                " NetworkTableType old: " + toNetworkTableType(entry.type) + 
+                " new: " + toNetworkTableType(V3toNTEntryType.get(msg.entryType)) );
+            this.emit("entryDeleted", {
 			          source: NTEventUpdateSource.REMOTE,
                       entry: {...this._entries.get(msg.entryId)}
 			} );
