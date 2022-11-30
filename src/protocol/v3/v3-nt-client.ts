@@ -548,9 +548,9 @@ export default class V3NTClient extends NTClient {
                 " NetworkTableType old: " + toNetworkTableType(entry.type) + 
                 " new: " + toNetworkTableType(V3toNTEntryType.get(msg.entryType)) );
             this.emit("entryDeleted", {
-                      source: NTEventUpdateSource.REMOTE,
-                      entry: {...this._entries.get(msg.entryId)}
-                    });
+                source: NTEventUpdateSource.REMOTE,
+                entry: {...this._entries.get(msg.entryId)}
+                });
         }
         else if (this._pendingEntries.has(msg.entryName)) {
             isPendingEntry = true;
